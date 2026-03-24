@@ -1,5 +1,7 @@
+using Gladius.Combat.Results;
 using Gladius.Data.Definitions;
 using Gladius.Data.Runtime;
+using Gladius.Utilities.RNG;
 
 namespace Gladius.Combat.Systems
 {
@@ -18,22 +20,29 @@ namespace Gladius.Combat.Systems
             _maxHitChance = controls.MaxHitChance;
         }
 
-        public double Calculate(GladiatorRuntimeState attacker, GladiatorRuntimeState defender)
+        public HitChanceResult Resolve(GladiatorRuntimeState attacker, GladiatorRuntimeState defender, IRngService rngService)
         {
             var delta = (attacker.Accuracy - defender.Evasion) * _hitDeltaPerPoint;
-            var chance = _baseHitChance + delta;
+            var unclampedChance = _baseHitChance + delta;
+            var probability = Clamp(unclampedChance, _minHitChance, _maxHitChance);
+            var roll = rngService.NextDouble();
+            var didHit = roll <= probability;
+            return new HitChanceResult(probability, roll, didHit);
+        }
 
-            if (chance < _minHitChance)
+        private static double Clamp(double value, double min, double max)
+        {
+            if (value < min)
             {
-                return _minHitChance;
+                return min;
             }
 
-            if (chance > _maxHitChance)
+            if (value > max)
             {
-                return _maxHitChance;
+                return max;
             }
 
-            return chance;
+            return value;
         }
     }
 }

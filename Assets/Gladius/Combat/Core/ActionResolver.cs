@@ -1,3 +1,4 @@
+using Gladius.Combat.Results;
 using Gladius.Combat.Systems;
 using Gladius.Data.Runtime;
 using Gladius.Utilities.RNG;
@@ -6,6 +7,8 @@ namespace Gladius.Combat.Core
 {
     public sealed class ActionResolver
     {
+        private const int BasicAttackStaminaCost = 1;
+
         private readonly DamageSystem _damageSystem;
         private readonly HitChanceSystem _hitChanceSystem;
         private readonly StatusSystem _statusSystem;
@@ -26,33 +29,41 @@ namespace Gladius.Combat.Core
             _rngService = rngService;
         }
 
-        public ResolutionResult ResolveBasicAttack(GladiatorRuntimeState actor, GladiatorRuntimeState target)
+        public AttackResolutionResult ResolveBasicAttack(GladiatorRuntimeState attacker, GladiatorRuntimeState defender)
         {
-            if (!_staminaSystem.HasEnough(actor, 1))
+            if (!_staminaSystem.HasEnough(attacker, BasicAttackStaminaCost))
             {
-                return ResolutionResult.StaminaBlocked;
+                return AttackResolutionResult.StaminaBlocked;
             }
 
-            _staminaSystem.Spend(actor, 1);
-            var hitChance = _hitChanceSystem.Calculate(actor, target);
-            var didHit = _rngService.NextDouble() <= hitChance;
+            _staminaSystem.Spend(attacker, BasicAttackStaminaCost);
+            var hitChance = _hitChanceSystem.Resolve(attacker, defender, _rngService);
 
-            if (!didHit)
+            if (!hitChance.DidHit)
             {
-                return ResolutionResult.Miss;
+                return new AttackResolutionResult(
+                    AttackResolutionType.Miss,
+                    BasicAttackStaminaCost,
+                    attacker.CurrentStamina,
+                    hitChance,
+                    default,
+                    defender.CurrentHp,
+                    defender.CurrentHp);
             }
 
-            var damage = _damageSystem.Calculate(actor, target);
-            target.CurrentHp = target.CurrentHp - damage;
-            _statusSystem.Tick(target);
-            return ResolutionResult.Hit;
+            var targetHpBeforeDamage = defender.CurrentHp;
+            var damage = _damageSystem.Calculate(attacker, defender);
+            defender.CurrentHp -= damage.FinalDamage;
+            _statusSystem.Tick(defender);
+
+            return new AttackResolutionResult(
+                AttackResolutionType.Hit,
+                BasicAttackStaminaCost,
+                attacker.CurrentStamina,
+                hitChance,
+                damage,
+                targetHpBeforeDamage,
+                defender.CurrentHp);
         }
-    }
-
-    public enum ResolutionResult
-    {
-        StaminaBlocked,
-        Miss,
-        Hit
     }
 }

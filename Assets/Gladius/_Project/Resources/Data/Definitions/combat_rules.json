@@ -1,0 +1,10 @@
+{
+  "controls": {
+    "id": "COMBAT_CONTROLS",
+    "baseHitChance": 0.70,
+    "hitDeltaPerPoint": 0.02,
+    "minHitChance": 0.10,
+    "maxHitChance": 0.95,
+    "minDamage": 1
+  }
+}

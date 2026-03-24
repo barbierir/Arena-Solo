@@ -1,0 +1,9 @@
+{
+  "statusEffects": [
+    {
+      "id": "BLEEDING",
+      "stackRule": "Refresh",
+      "defaultDuration": 2
+    }
+  ]
+}
