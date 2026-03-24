@@ -28,8 +28,8 @@ func _on_run_pressed() -> void:
 func _on_replay_pressed() -> void:
 	_run_fight(_last_seed)
 
-func _run_fight(seed: int) -> void:
-	_rng_service = RNG_SERVICE_SCRIPT.new(seed)
+func _run_fight(match_seed: int) -> void:
+	_rng_service = RNG_SERVICE_SCRIPT.new(match_seed)
 	_combat_simulation = COMBAT_SIMULATION_SCRIPT.new()
 	_combat_simulation.configure(_content_registry, _rng_service)
 	_combat_simulation.bootstrap_default_encounter("RET_STARTER", "SEC_STARTER")
