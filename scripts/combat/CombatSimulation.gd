@@ -21,6 +21,9 @@ func configure(registry: ContentRegistry, rng: SeededRngService) -> void:
 	build_stats_resolver.configure(registry)
 
 func bootstrap_default_encounter(attacker_build_id: String, defender_build_id: String) -> void:
+	initialize_fight(attacker_build_id, defender_build_id)
+
+func initialize_fight(attacker_build_id: String, defender_build_id: String) -> void:
 	runtime_state = COMBAT_RUNTIME_STATE_SCRIPT.new()
 	runtime_state.attacker_build_id = attacker_build_id
 	runtime_state.defender_build_id = defender_build_id
@@ -30,19 +33,36 @@ func bootstrap_default_encounter(attacker_build_id: String, defender_build_id: S
 	runtime_state.append_log("Encounter initialized: %s vs %s (seed=%d)" % [attacker_build_id, defender_build_id, rng_service.get_seed()])
 
 func simulate_single_turn() -> void:
-	if runtime_state == null:
+	if runtime_state == null or is_finished():
 		return
 	turn_controller.execute_turn(runtime_state)
 
 func simulate_to_completion(max_turns: int = 64) -> CombatRuntimeState:
 	for _i in range(max_turns):
-		if runtime_state.result_state != "PENDING":
+		if is_finished():
 			break
 		simulate_single_turn()
-	if runtime_state.result_state == "PENDING":
+	if runtime_state != null and runtime_state.result_state == "PENDING":
 		runtime_state.result_state = "ABORTED"
 		runtime_state.append_log("Combat aborted after max turns (%d)." % max_turns)
 	return runtime_state
+
+func run_to_completion(max_turns: int = 64) -> CombatRuntimeState:
+	return simulate_to_completion(max_turns)
+
+func step_turn() -> void:
+	simulate_single_turn()
+
+func is_finished() -> bool:
+	return runtime_state != null and runtime_state.result_state != "PENDING"
+
+func get_runtime_state() -> CombatRuntimeState:
+	return runtime_state
+
+func get_log() -> Array[String]:
+	if runtime_state == null:
+		return []
+	return runtime_state.combat_log
 
 func _make_combatant_state(build_id: String, combatant_id: String) -> CombatantRuntimeState:
 	var state: CombatantRuntimeState = COMBATANT_RUNTIME_STATE_SCRIPT.new()
