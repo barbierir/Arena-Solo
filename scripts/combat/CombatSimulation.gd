@@ -27,9 +27,9 @@ func initialize_fight(attacker_build_id: String, defender_build_id: String) -> v
 	runtime_state = COMBAT_RUNTIME_STATE_SCRIPT.new()
 	runtime_state.attacker_build_id = attacker_build_id
 	runtime_state.defender_build_id = defender_build_id
-	runtime_state.combatant_states[attacker_build_id] = _make_combatant_state(attacker_build_id, "PLAYER")
-	runtime_state.combatant_states[defender_build_id] = _make_combatant_state(defender_build_id, "ENEMY")
-	runtime_state.next_actor_id = _resolve_first_actor(attacker_build_id, defender_build_id)
+	runtime_state.combatant_states[CombatRuntimeState.ATTACKER_SIDE_ID] = _make_combatant_state(attacker_build_id, CombatRuntimeState.ATTACKER_SIDE_ID)
+	runtime_state.combatant_states[CombatRuntimeState.DEFENDER_SIDE_ID] = _make_combatant_state(defender_build_id, CombatRuntimeState.DEFENDER_SIDE_ID)
+	runtime_state.next_actor_id = _resolve_first_actor()
 	runtime_state.append_log("Encounter initialized: %s vs %s (seed=%d)" % [attacker_build_id, defender_build_id, rng_service.get_seed()])
 
 func simulate_single_turn() -> void:
@@ -89,11 +89,11 @@ func _make_combatant_state(build_id: String, combatant_id: String) -> CombatantR
 	state.total_crit_mod_pct = float(stats.total_crit_mod_pct)
 	return state
 
-func _resolve_first_actor(attacker_build_id: String, defender_build_id: String) -> String:
-	var attacker: CombatantRuntimeState = runtime_state.combatant_states.get(attacker_build_id)
-	var defender: CombatantRuntimeState = runtime_state.combatant_states.get(defender_build_id)
+func _resolve_first_actor() -> String:
+	var attacker: CombatantRuntimeState = runtime_state.attacker_state()
+	var defender: CombatantRuntimeState = runtime_state.defender_state()
 	if attacker.base_spd > defender.base_spd:
-		return attacker_build_id
+		return CombatRuntimeState.ATTACKER_SIDE_ID
 	if defender.base_spd > attacker.base_spd:
-		return defender_build_id
-	return attacker_build_id if rng_service.randf() <= 0.5 else defender_build_id
+		return CombatRuntimeState.DEFENDER_SIDE_ID
+	return CombatRuntimeState.ATTACKER_SIDE_ID if rng_service.randf() <= 0.5 else CombatRuntimeState.DEFENDER_SIDE_ID
