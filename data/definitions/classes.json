@@ -19,7 +19,7 @@
       "base_hp": 24,
       "base_sta": 9,
       "base_atk": 7,
-      "base_def": 6,
+      "base_def": 5,
       "base_spd": 5,
       "base_skl": 5,
       "allowed_skill_ids": ["BASIC_ATTACK", "DEFEND", "RECOVER", "SHIELD_BASH"]
