@@ -20,6 +20,36 @@ The slice is simulation-first and data-driven.
 
 The UI shows HP, stamina, statuses, active turn actor, combat log, and final result.
 
+## Batch balance harness (developer tool)
+
+The combat viewer now includes a **Batch Balance Harness** panel that runs many deterministic fights and reports aggregate metrics for tuning.
+
+### Batch workflow in UI
+
+1. Choose fighter **A** and **B** in the main selectors.
+2. In **Batch Balance Harness**, set:
+   - `Start Seed`
+   - `Runs` (number of simulations)
+   - `Max Turns` safeguard per fight
+3. Click **Run Batch**.
+
+### Batch metrics reported
+
+- Total runs
+- A/B wins and win rates
+- Draw/unresolved count
+- Average/min/max turns
+- Average end-of-fight HP and STA for both fighters
+- Terminal condition counts (`HP_ZERO`, `MAX_TURNS_ABORT`, etc.)
+- Ability usage frequency (per skill/action)
+- Status application frequency (per status ID)
+
+### Determinism and safeguards
+
+- The batch harness reuses the same `CombatSimulation` path as single-fight debug.
+- For `N` runs, seeds are progressive: `S`, `S+1`, ..., `S+N-1`.
+- If a fight exceeds `Max Turns`, it is marked as `ABORTED` and counted as unresolved (not silently reassigned as a win).
+
 ### Step Turn behavior
 
 - Stepped and full-run combat both use the same simulation API (`initialize_fight`, `step_turn`, `run_to_completion`).
@@ -65,3 +95,5 @@ godot4 --headless --script res://tests/combat/test_vertical_slice.gd
 ```
 
 Coverage includes deterministic replay, terminal resolution, stepped-vs-full parity, status duration behavior, stamina interactions, and fight end conditions.
+
+Batch harness tests are included in the same script, covering deterministic batch outputs, progressive seeding, accounting consistency, turn-stat validity, and parity against a manual seeded loop.

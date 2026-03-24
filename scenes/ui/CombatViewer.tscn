@@ -83,6 +83,75 @@ unique_name_in_owner = true
 layout_mode = 2
 text = "Replay Same Seed"
 
+[node name="BatchPanel" type="PanelContainer" parent="OuterMargin/Panel/Margin/RootVBox"]
+layout_mode = 2
+
+[node name="BatchMargin" type="MarginContainer" parent="OuterMargin/Panel/Margin/RootVBox/BatchPanel"]
+layout_mode = 2
+theme_override_constants/margin_left = 8
+theme_override_constants/margin_top = 8
+theme_override_constants/margin_right = 8
+theme_override_constants/margin_bottom = 8
+
+[node name="BatchVBox" type="VBoxContainer" parent="OuterMargin/Panel/Margin/RootVBox/BatchPanel/BatchMargin"]
+layout_mode = 2
+theme_override_constants/separation = 6
+
+[node name="BatchTitle" type="Label" parent="OuterMargin/Panel/Margin/RootVBox/BatchPanel/BatchMargin/BatchVBox"]
+layout_mode = 2
+text = "Batch Balance Harness"
+
+[node name="BatchControlsRow" type="HBoxContainer" parent="OuterMargin/Panel/Margin/RootVBox/BatchPanel/BatchMargin/BatchVBox"]
+layout_mode = 2
+
+[node name="BatchSeedLabel" type="Label" parent="OuterMargin/Panel/Margin/RootVBox/BatchPanel/BatchMargin/BatchVBox/BatchControlsRow"]
+layout_mode = 2
+text = "Start Seed"
+
+[node name="BatchSeedInput" type="LineEdit" parent="OuterMargin/Panel/Margin/RootVBox/BatchPanel/BatchMargin/BatchVBox/BatchControlsRow"]
+unique_name_in_owner = true
+layout_mode = 2
+custom_minimum_size = Vector2(90, 0)
+text = "1001"
+
+[node name="BatchCountLabel" type="Label" parent="OuterMargin/Panel/Margin/RootVBox/BatchPanel/BatchMargin/BatchVBox/BatchControlsRow"]
+layout_mode = 2
+text = "Runs"
+
+[node name="BatchCountInput" type="LineEdit" parent="OuterMargin/Panel/Margin/RootVBox/BatchPanel/BatchMargin/BatchVBox/BatchControlsRow"]
+unique_name_in_owner = true
+layout_mode = 2
+custom_minimum_size = Vector2(90, 0)
+text = "100"
+
+[node name="BatchMaxTurnsLabel" type="Label" parent="OuterMargin/Panel/Margin/RootVBox/BatchPanel/BatchMargin/BatchVBox/BatchControlsRow"]
+layout_mode = 2
+text = "Max Turns"
+
+[node name="BatchMaxTurnsInput" type="LineEdit" parent="OuterMargin/Panel/Margin/RootVBox/BatchPanel/BatchMargin/BatchVBox/BatchControlsRow"]
+unique_name_in_owner = true
+layout_mode = 2
+custom_minimum_size = Vector2(90, 0)
+text = "128"
+
+[node name="RunBatchButton" type="Button" parent="OuterMargin/Panel/Margin/RootVBox/BatchPanel/BatchMargin/BatchVBox/BatchControlsRow"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Run Batch"
+
+[node name="BatchSummaryLabel" type="Label" parent="OuterMargin/Panel/Margin/RootVBox/BatchPanel/BatchMargin/BatchVBox"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Run batch to see summary."
+
+[node name="BatchResultsLabel" type="RichTextLabel" parent="OuterMargin/Panel/Margin/RootVBox/BatchPanel/BatchMargin/BatchVBox"]
+unique_name_in_owner = true
+layout_mode = 2
+custom_minimum_size = Vector2(0, 170)
+fit_content = false
+scroll_active = true
+autowrap_mode = 3
+
 [node name="MainRow" type="HBoxContainer" parent="OuterMargin/Panel/Margin/RootVBox"]
 layout_mode = 2
 size_flags_vertical = 3
