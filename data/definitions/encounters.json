@@ -1,0 +1,12 @@
+{
+  "entries": {
+    "ENC_RET_VS_SEC_STARTER": {
+      "id": "ENC_RET_VS_SEC_STARTER",
+      "display_name": "Starter Duel",
+      "attacker_build_id": "RET_STARTER",
+      "defender_build_id": "SEC_STARTER",
+      "seed": 1001,
+      "notes": "Vertical slice foundation duel."
+    }
+  }
+}

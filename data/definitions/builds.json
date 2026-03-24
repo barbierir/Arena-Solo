@@ -1,0 +1,22 @@
+{
+  "entries": {
+    "RET_STARTER": {
+      "id": "RET_STARTER",
+      "display_name": "Retiarius Starter",
+      "class_id": "RETIARIUS",
+      "weapon_id": "TRIDENT_START",
+      "offhand_id": "NET_START",
+      "skill_ids": ["BASIC_ATTACK", "DEFEND", "RECOVER", "NET_THROW"],
+      "ai_profile_id": "AI_RET_STARTER"
+    },
+    "SEC_STARTER": {
+      "id": "SEC_STARTER",
+      "display_name": "Secutor Starter",
+      "class_id": "SECUTOR",
+      "weapon_id": "GLADIUS_START",
+      "offhand_id": "TOWER_SHIELD_START",
+      "skill_ids": ["BASIC_ATTACK", "DEFEND", "RECOVER", "SHIELD_BASH"],
+      "ai_profile_id": "AI_SEC_STARTER"
+    }
+  }
+}

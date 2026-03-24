@@ -1,0 +1,16 @@
+{
+  "entries": {
+    "ENTANGLED": {
+      "id": "ENTANGLED",
+      "display_name": "Entangled",
+      "stack_rule": "Refresh",
+      "atk_mod": -2,
+      "def_mod": 0,
+      "spd_mod": -3,
+      "sta_regen_mod": 0,
+      "dot_damage": 0,
+      "skip_turn": false,
+      "duration_source": "Skill"
+    }
+  }
+}

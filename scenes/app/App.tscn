@@ -1,0 +1,9 @@
+[gd_scene load_steps=3 format=3 uid="uid://appscene"]
+
+[ext_resource type="Script" path="res://scripts/core/AppBootstrap.gd" id="1_1"]
+[ext_resource type="PackedScene" path="res://scenes/combat/CombatTest.tscn" id="2_1"]
+
+[node name="App" type="Node"]
+script = ExtResource("1_1")
+
+[node name="CombatTest" parent="." instance=ExtResource("2_1")]

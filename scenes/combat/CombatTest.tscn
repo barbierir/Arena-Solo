@@ -1,0 +1,10 @@
+[gd_scene load_steps=3 format=3 uid="uid://combattest"]
+
+[ext_resource type="Script" path="res://scripts/combat/CombatTestScreen.gd" id="1_1"]
+[ext_resource type="PackedScene" path="res://scenes/ui/CombatViewer.tscn" id="2_1"]
+
+[node name="CombatTest" type="Node2D"]
+script = ExtResource("1_1")
+
+[node name="CombatViewer" parent="." instance=ExtResource("2_1")]
+unique_name_in_owner = true
