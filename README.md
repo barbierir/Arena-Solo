@@ -13,10 +13,18 @@ The slice is simulation-first and data-driven.
 2. Run the default scene (`scenes/app/App.tscn`).
 3. In the combat viewer:
    - Enter a seed (defaults to `1001`)
-   - Click **Run Fight** to execute the duel
-   - Click **Replay Same Seed** to verify deterministic replay
+   - Select fighter builds for side **A** and **B**
+   - Click **Step Turn** to initialize (if needed) and advance exactly one turn
+   - Click **Run Fight** to execute the duel to completion
+   - Click **Replay Same Seed** to rerun the same matchup and seed deterministically
 
 The UI shows HP, stamina, statuses, active turn actor, combat log, and final result.
+
+### Step Turn behavior
+
+- Stepped and full-run combat both use the same simulation API (`initialize_fight`, `step_turn`, `run_to_completion`).
+- `Step Turn` does nothing once a fight has reached a terminal result.
+- `Replay Same Seed` recreates the last matchup with the same seed; if no active fight exists yet, it initializes from the current selectors and seed input.
 
 ## Where combat data lives
 
@@ -55,3 +63,5 @@ Run (if Godot CLI is available):
 ```bash
 godot4 --headless --script res://tests/combat/test_vertical_slice.gd
 ```
+
+Coverage includes deterministic replay, terminal resolution, stepped-vs-full parity, status duration behavior, stamina interactions, and fight end conditions.
