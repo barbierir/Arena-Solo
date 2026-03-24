@@ -29,7 +29,7 @@
       "display_name": "Entangled",
       "stack_rule": "Refresh",
       "atk_mod": -2,
-      "def_mod": -3,
+      "def_mod": -2,
       "spd_mod": -3,
       "sta_regen_mod": 0,
       "dot_damage": 0,
