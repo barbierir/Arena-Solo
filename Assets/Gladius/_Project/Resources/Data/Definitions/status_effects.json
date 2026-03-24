@@ -1,9 +1,43 @@
 {
   "statusEffects": [
     {
-      "id": "BLEEDING",
+      "id": "ENTANGLED",
+      "displayName": "Entangled",
       "stackRule": "Refresh",
-      "defaultDuration": 2
+      "atkMod": -2,
+      "defMod": 0,
+      "spdMod": -3,
+      "staRegenMod": 0,
+      "dotDamage": 0,
+      "skipTurn": false,
+      "durationSource": "Skill",
+      "notes": "Reduced ATK and SPD."
+    },
+    {
+      "id": "STUNNED",
+      "displayName": "Stunned",
+      "stackRule": "Replace",
+      "atkMod": 0,
+      "defMod": 0,
+      "spdMod": 0,
+      "staRegenMod": 0,
+      "dotDamage": 0,
+      "skipTurn": true,
+      "durationSource": "Skill",
+      "notes": "Skip next action."
+    },
+    {
+      "id": "EXHAUSTED",
+      "displayName": "Exhausted",
+      "stackRule": "Replace",
+      "atkMod": -2,
+      "defMod": 0,
+      "spdMod": -2,
+      "staRegenMod": -1,
+      "dotDamage": 0,
+      "skipTurn": false,
+      "durationSource": "Runtime",
+      "notes": "Applied automatically when stamina hits zero."
     }
   ]
 }

@@ -1,0 +1,11 @@
+{
+  "aiProfiles": [
+    {
+      "id": "STARTER_DUEL_AI",
+      "displayName": "Starter Duel AI",
+      "recoverAtOrBelowSta": 1,
+      "preferKillThresholdHp": 4,
+      "allowStatusSetup": true
+    }
+  ]
+}

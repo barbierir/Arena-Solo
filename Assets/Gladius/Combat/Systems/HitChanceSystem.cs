@@ -7,41 +7,30 @@ namespace Gladius.Combat.Systems
 {
     public sealed class HitChanceSystem
     {
-        private readonly float _baseHitChance;
-        private readonly float _hitDeltaPerPoint;
-        private readonly float _minHitChance;
-        private readonly float _maxHitChance;
+        private readonly CombatControlsDefinition _controls;
 
         public HitChanceSystem(CombatControlsDefinition controls)
         {
-            _baseHitChance = controls.BaseHitChance;
-            _hitDeltaPerPoint = controls.HitDeltaPerPoint;
-            _minHitChance = controls.MinHitChance;
-            _maxHitChance = controls.MaxHitChance;
+            _controls = controls;
         }
 
-        public HitChanceResult Resolve(GladiatorRuntimeState attacker, GladiatorRuntimeState defender, IRngService rngService)
+        public HitChanceResult Resolve(GladiatorRuntimeState attacker, GladiatorRuntimeState defender, SkillDefinition skill, float conditionalHitModPct, IRngService rngService)
         {
-            var delta = (attacker.Accuracy - defender.Evasion) * _hitDeltaPerPoint;
-            var unclampedChance = _baseHitChance + delta;
-            var probability = Clamp(unclampedChance, _minHitChance, _maxHitChance);
+            var dodgePenalty = defender.Spd - attacker.Spd >= 5 ? _controls.DodgeBonusIfDefenderSpdLeadGte5 : 0f;
+            var unclamped = _controls.BaseHitChance
+                            + (attacker.Atk - defender.Spd) * _controls.HitDeltaPerPoint
+                            + skill.AccuracyModPct
+                            + conditionalHitModPct
+                            - dodgePenalty;
+            var probability = Clamp(unclamped, _controls.MinHitChance, _controls.MaxHitChance);
             var roll = rngService.NextDouble();
-            var didHit = roll <= probability;
-            return new HitChanceResult(probability, roll, didHit);
+            return new HitChanceResult(probability, roll, roll <= probability);
         }
 
-        private static double Clamp(double value, double min, double max)
+        private static float Clamp(float value, float min, float max)
         {
-            if (value < min)
-            {
-                return min;
-            }
-
-            if (value > max)
-            {
-                return max;
-            }
-
+            if (value < min) return min;
+            if (value > max) return max;
             return value;
         }
     }
