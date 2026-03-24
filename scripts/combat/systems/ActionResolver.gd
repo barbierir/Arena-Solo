@@ -42,7 +42,7 @@ func resolve_turn(runtime_state: CombatRuntimeState, actor_id: String) -> void:
 		return
 
 	actor.temporary_defense_bonus = 0
-	var regen := _stamina_system.apply_turn_regen(actor, controls, statuses)
+	var regen: int = _stamina_system.apply_turn_regen(actor, controls, statuses)
 	runtime_state.append_log("%s regenerates %d STA -> %d/%d." % [actor.display_name, regen, actor.current_sta, actor.max_sta])
 	_status_system.update_exhausted(actor)
 	_tick_cooldowns(actor)
@@ -50,13 +50,13 @@ func resolve_turn(runtime_state: CombatRuntimeState, actor_id: String) -> void:
 	if not _status_system.can_act(actor, statuses):
 		runtime_state.append_log("%s is stunned and loses the turn." % actor.display_name)
 		_status_system.tick_status_durations(actor)
-		var skip_dot := _status_system.apply_end_of_turn_effects(actor, statuses)
+		var skip_dot: int = _status_system.apply_end_of_turn_effects(actor, statuses)
 		if skip_dot > 0:
 			runtime_state.append_log("%s takes %d DOT damage." % [actor.display_name, skip_dot])
 		_victory_resolver.resolve_if_decided(runtime_state)
 		return
 
-	var skill_id := _choose_action(actor, target, runtime_state)
+	var skill_id: String = _choose_action(actor, target, runtime_state)
 	var skill: Dictionary = skills.get(skill_id, skills.get("BASIC_ATTACK", {}))
 	if int(skill.get("sta_cost", 999)) > actor.current_sta:
 		skill = skills.get("RECOVER", {})
@@ -65,7 +65,7 @@ func resolve_turn(runtime_state: CombatRuntimeState, actor_id: String) -> void:
 	_execute_action(runtime_state, actor, target, skill_id, skill, controls, statuses)
 	_status_system.tick_status_durations(actor)
 	_status_system.update_exhausted(actor)
-	var dot := _status_system.apply_end_of_turn_effects(actor, statuses)
+	var dot: int = _status_system.apply_end_of_turn_effects(actor, statuses)
 	if dot > 0:
 		runtime_state.append_log("%s takes %d DOT damage." % [actor.display_name, dot])
 	_victory_resolver.resolve_if_decided(runtime_state)
@@ -82,12 +82,12 @@ func _choose_action(actor: CombatantRuntimeState, target: CombatantRuntimeState,
 	return "RECOVER"
 
 func _execute_action(runtime_state: CombatRuntimeState, actor: CombatantRuntimeState, target: CombatantRuntimeState, skill_id: String, skill: Dictionary, controls: Dictionary, status_defs: Dictionary) -> void:
-	var sta_cost := int(skill.get("sta_cost", 0))
+	var sta_cost: int = int(skill.get("sta_cost", 0))
 	_stamina_system.spend(actor, sta_cost)
 	_status_system.update_exhausted(actor)
 
 	if skill_id == "RECOVER":
-		var recovered := _stamina_system.recover(actor, controls)
+		var recovered: int = _stamina_system.recover(actor, controls)
 		runtime_state.append_log("%s uses Recover and restores %d STA." % [actor.display_name, recovered])
 		return
 
@@ -96,25 +96,25 @@ func _execute_action(runtime_state: CombatRuntimeState, actor: CombatantRuntimeS
 		runtime_state.append_log("%s uses Defend (+%d DEF until next action)." % [actor.display_name, actor.temporary_defense_bonus])
 		return
 
-	var conditional_hit_bonus := _conditional_equipment_hit_bonus(actor, skill_id)
-	var hit_chance := _hit_chance_system.calculate(actor, target, skill, controls, status_defs, conditional_hit_bonus)
-	var hit_roll := _rng_service.randf()
+	var conditional_hit_bonus: float = _conditional_equipment_hit_bonus(actor, skill_id)
+	var hit_chance: float = _hit_chance_system.calculate(actor, target, skill, controls, status_defs, conditional_hit_bonus)
+	var hit_roll: float = _rng_service.randf()
 	if hit_roll > hit_chance:
 		runtime_state.append_log("%s uses %s: miss (%.2f > %.2f)." % [actor.display_name, skill.get("display_name", skill_id), hit_roll, hit_chance])
 		_set_cooldown(actor, skill_id, skill)
 		return
 
-	var base_damage := _damage_system.calculate_base_damage(actor, target, skill, controls, status_defs)
-	var crit_chance := _hit_chance_system.calculate_crit(actor, skill, controls)
-	var resolved := _damage_system.resolve_damage(base_damage, crit_chance, float(controls.get("crit_multiplier", 2.0)), _rng_service)
-	var damage := int(resolved.damage)
+	var base_damage: int = _damage_system.calculate_base_damage(actor, target, skill, controls, status_defs)
+	var crit_chance: float = _hit_chance_system.calculate_crit(actor, skill, controls)
+	var resolved: Dictionary = _damage_system.resolve_damage(base_damage, crit_chance, float(controls.get("crit_multiplier", 2.0)), _rng_service)
+	var damage: int = int(resolved.damage)
 	target.current_hp = maxi(0, target.current_hp - damage)
-	var crit_tag := ""
+	var crit_tag: String = ""
 	if bool(resolved.is_crit):
 		crit_tag = " CRIT"
 	runtime_state.append_log("%s uses %s and hits for %d%s damage. %s HP: %d/%d." % [actor.display_name, skill.get("display_name", skill_id), damage, crit_tag, target.display_name, target.current_hp, target.max_hp])
 
-	var status_id := str(skill.get("apply_status_id", ""))
+	var status_id: String = str(skill.get("apply_status_id", ""))
 	if status_id != "":
 		_status_system.apply_status(target, status_id, int(skill.get("status_turns", 0)), skill_id, status_defs)
 		runtime_state.append_log("%s is afflicted with %s (%d turns)." % [target.display_name, status_id, int(skill.get("status_turns", 0))])
@@ -125,19 +125,19 @@ func _conditional_equipment_hit_bonus(actor: CombatantRuntimeState, skill_id: St
 	if skill_id != "NET_THROW":
 		return 0.0
 	var build: Dictionary = _content_registry.builds.get("entries", {}).get(actor.build_id, {})
-	var offhand_id := str(build.get("offhand_item_id", ""))
+	var offhand_id: String = str(build.get("offhand_item_id", ""))
 	var item: Dictionary = _content_registry.equipment.get("entries", {}).get(offhand_id, {})
 	return float(item.get("hit_mod_pct", 0.0))
 
 func _set_cooldown(actor: CombatantRuntimeState, skill_id: String, skill: Dictionary) -> void:
-	var cooldown := int(skill.get("cooldown_turns", 0))
+	var cooldown: int = int(skill.get("cooldown_turns", 0))
 	if cooldown > 0:
 		actor.cooldowns[skill_id] = cooldown
 
 func _tick_cooldowns(actor: CombatantRuntimeState) -> void:
 	var next: Dictionary = {}
 	for skill_id in actor.cooldowns.keys():
-		var remaining := int(actor.cooldowns[skill_id]) - 1
+		var remaining: int = int(actor.cooldowns[skill_id]) - 1
 		if remaining > 0:
 			next[skill_id] = remaining
 	actor.cooldowns = next

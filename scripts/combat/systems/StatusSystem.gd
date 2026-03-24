@@ -29,7 +29,7 @@ func apply_status(target: CombatantRuntimeState, status_id: String, turns: int, 
 	})
 
 func apply_end_of_turn_effects(actor: CombatantRuntimeState, status_defs: Dictionary) -> int:
-	var dot_total := 0
+	var dot_total: int = 0
 	for status in actor.active_statuses:
 		var definition: Dictionary = status_defs.get(status.get("status_id", ""), {})
 		dot_total += int(definition.get("dot_damage", 0))
@@ -40,7 +40,7 @@ func apply_end_of_turn_effects(actor: CombatantRuntimeState, status_defs: Dictio
 func tick_status_durations(actor: CombatantRuntimeState) -> void:
 	var updated: Array[Dictionary] = []
 	for status in actor.active_statuses:
-		var remain := int(status.get("remaining_turns", 0)) - 1
+		var remain: int = int(status.get("remaining_turns", 0)) - 1
 		if remain > 0:
 			status["remaining_turns"] = remain
 			updated.append(status)

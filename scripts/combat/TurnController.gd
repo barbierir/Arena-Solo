@@ -13,7 +13,7 @@ func execute_turn(runtime_state: CombatRuntimeState) -> void:
 	if runtime_state.result_state != "PENDING":
 		return
 	runtime_state.turn_index += 1
-	var actor_id := runtime_state.next_actor_id
+	var actor_id: String = runtime_state.next_actor_id
 	if actor_id == "":
 		actor_id = runtime_state.attacker_build_id
 	runtime_state.current_actor_id = actor_id

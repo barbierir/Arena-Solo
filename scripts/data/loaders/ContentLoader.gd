@@ -1,7 +1,7 @@
 extends RefCounted
 class_name ContentLoader
 
-const FILES := {
+const FILES: Dictionary = {
 	"combat_rules": "res://data/definitions/combat_rules.json",
 	"classes": "res://data/definitions/classes.json",
 	"builds": "res://data/definitions/builds.json",
@@ -13,7 +13,7 @@ const FILES := {
 }
 
 func load_all_definitions() -> ContentRegistry:
-	var registry := ContentRegistry.new()
+	var registry: ContentRegistry = ContentRegistry.new()
 	registry.combat_rules = _load_json(FILES.combat_rules)
 	registry.status_effects = _load_json(FILES.status_effects)
 	registry.skills = _load_json(FILES.skills)
@@ -29,9 +29,10 @@ func _load_json(path: String) -> Dictionary:
 		push_error("Definition file missing: %s" % path)
 		return {}
 
-	var file := FileAccess.open(path, FileAccess.READ)
-	var parsed := JSON.parse_string(file.get_as_text())
+	var file: FileAccess = FileAccess.open(path, FileAccess.READ)
+	var parsed: Variant = JSON.parse_string(file.get_as_text())
 	if typeof(parsed) != TYPE_DICTIONARY:
 		push_error("Definition file did not parse as Dictionary: %s" % path)
 		return {}
-	return parsed
+	var parsed_dict: Dictionary = parsed
+	return parsed_dict
