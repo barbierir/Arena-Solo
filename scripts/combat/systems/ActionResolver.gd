@@ -62,6 +62,7 @@ func resolve_turn(runtime_state: CombatRuntimeState, actor_id: String) -> void:
 		"actor_sta_after": actor.current_sta,
 		"actor_statuses_before": actor_statuses_before,
 		"actor_statuses_after": actor.status_labels(statuses),
+		"actor_active_status_ids": _active_status_ids(actor),
 		"target_side_id": target.combatant_id,
 		"target_build_id": target.build_id,
 		"target_hp_before": target_hp_before,
@@ -70,6 +71,7 @@ func resolve_turn(runtime_state: CombatRuntimeState, actor_id: String) -> void:
 		"target_sta_after": target.current_sta,
 		"target_statuses_before": target_statuses_before,
 		"target_statuses_after": target.status_labels(statuses),
+		"target_active_status_ids": _active_status_ids(target),
 		"stamina_regen": regen,
 	})
 
@@ -121,7 +123,9 @@ func _execute_action(runtime_state: CombatRuntimeState, actor: CombatantRuntimeS
 		var recovered: int = _stamina_system.recover(actor, controls)
 		runtime_state.append_log("%s uses Recover and restores %d STA." % [actor.display_name, recovered])
 		runtime_state.append_event("ACTION_USED", {
+			"actor_side_id": actor.combatant_id,
 			"actor_build_id": actor.build_id,
+			"target_side_id": target.combatant_id,
 			"target_build_id": target.build_id,
 			"skill_id": skill_id,
 			"hit": false,
@@ -133,7 +137,9 @@ func _execute_action(runtime_state: CombatRuntimeState, actor: CombatantRuntimeS
 		actor.temporary_defense_bonus = int(controls.get("defend_bonus_def", 2))
 		runtime_state.append_log("%s uses Defend (+%d DEF until next action)." % [actor.display_name, actor.temporary_defense_bonus])
 		runtime_state.append_event("ACTION_USED", {
+			"actor_side_id": actor.combatant_id,
 			"actor_build_id": actor.build_id,
+			"target_side_id": target.combatant_id,
 			"target_build_id": target.build_id,
 			"skill_id": skill_id,
 			"hit": false,
@@ -147,7 +153,9 @@ func _execute_action(runtime_state: CombatRuntimeState, actor: CombatantRuntimeS
 	if hit_roll > hit_chance:
 		runtime_state.append_log("%s uses %s: miss (%.2f > %.2f)." % [actor.display_name, skill.get("display_name", skill_id), hit_roll, hit_chance])
 		runtime_state.append_event("ACTION_USED", {
+			"actor_side_id": actor.combatant_id,
 			"actor_build_id": actor.build_id,
+			"target_side_id": target.combatant_id,
 			"target_build_id": target.build_id,
 			"skill_id": skill_id,
 			"hit": false,
@@ -166,7 +174,9 @@ func _execute_action(runtime_state: CombatRuntimeState, actor: CombatantRuntimeS
 		crit_tag = " CRIT"
 	runtime_state.append_log("%s uses %s and hits for %d%s damage. %s HP: %d/%d." % [actor.display_name, skill.get("display_name", skill_id), damage, crit_tag, target.display_name, target.current_hp, target.max_hp])
 	runtime_state.append_event("ACTION_USED", {
+		"actor_side_id": actor.combatant_id,
 		"actor_build_id": actor.build_id,
+		"target_side_id": target.combatant_id,
 		"target_build_id": target.build_id,
 		"skill_id": skill_id,
 		"hit": true,
@@ -192,6 +202,7 @@ func _execute_action(runtime_state: CombatRuntimeState, actor: CombatantRuntimeS
 		_status_system.apply_status(target, status_id, int(skill.get("status_turns", 0)), skill_id, status_defs)
 		runtime_state.append_log("%s is afflicted with %s (%d turns)." % [target.display_name, status_id, int(skill.get("status_turns", 0))])
 		runtime_state.append_event("STATUS_APPLIED", {
+			"target_side_id": target.combatant_id,
 			"target_build_id": target.build_id,
 			"status_id": status_id,
 			"source_skill_id": skill_id,
@@ -232,11 +243,22 @@ func _append_end_of_turn_telemetry(runtime_state: CombatRuntimeState, actor: Com
 		"actor_hp_after": actor.current_hp,
 		"actor_sta_after": actor.current_sta,
 		"actor_statuses_after": actor.status_labels(status_defs),
+		"actor_active_status_ids": _active_status_ids(actor),
 		"target_side_id": target.combatant_id,
 		"target_build_id": target.build_id,
 		"target_hp_after": target.current_hp,
 		"target_sta_after": target.current_sta,
 		"target_statuses_after": target.status_labels(status_defs),
+		"target_active_status_ids": _active_status_ids(target),
 		"dot_damage_applied": dot_damage,
 		"terminal_result_state": runtime_state.result_state,
 	})
+
+func _active_status_ids(combatant: CombatantRuntimeState) -> Array[String]:
+	var status_ids: Array[String] = []
+	for entry in combatant.active_statuses:
+		var status_id: String = str(entry.get("status_id", ""))
+		if status_id == "":
+			continue
+		status_ids.append(status_id)
+	return status_ids
