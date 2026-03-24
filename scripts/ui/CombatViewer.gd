@@ -158,6 +158,11 @@ func render_batch_results(batch_result: Dictionary, build_entries: Dictionary) -
 	lines.append("")
 	lines.append("Status Applications:")
 	lines.append_array(_sorted_count_lines(batch_result.get("status_application_counts", {})))
+	lines.append("")
+	lines.append("Per-Fighter Diagnostics:")
+	lines.append_array(_fighter_diagnostics_lines(batch_result.get("fighters", {}).get("attacker", {}), "A", attacker_name))
+	lines.append("")
+	lines.append_array(_fighter_diagnostics_lines(batch_result.get("fighters", {}).get("defender", {}), "B", defender_name))
 	batch_results_label.text = "\n".join(lines)
 
 func _selected_build_id(selector: OptionButton) -> String:
@@ -196,3 +201,38 @@ func _sorted_count_lines(counts: Dictionary) -> Array[String]:
 	for entry in entries:
 		lines.append("- %s: %d" % [str(entry.key), int(entry.count)])
 	return lines
+
+func _fighter_diagnostics_lines(metrics: Dictionary, side_id: String, display_name: String) -> Array[String]:
+	if metrics.is_empty():
+		return ["- %s (%s): no fighter telemetry." % [side_id, display_name]]
+	var lines: Array[String] = []
+	lines.append("- %s (%s):" % [side_id, display_name])
+	lines.append("  - Avg damage dealt/match: %.2f" % float(metrics.get("per_match", {}).get("avg_damage_dealt", 0.0)))
+	lines.append("  - Avg damage taken/match: %.2f" % float(metrics.get("per_match", {}).get("avg_damage_taken", 0.0)))
+	lines.append("  - Avg STA spent/match: %.2f" % float(metrics.get("per_match", {}).get("avg_sta_spent", 0.0)))
+	lines.append("  - Hits/Misses: %d / %d" % [int(metrics.get("hit_count", 0)), int(metrics.get("miss_count", 0))])
+	lines.append("  - Avg turns survived: %.2f" % float(metrics.get("per_match", {}).get("avg_turns_survived", 0.0)))
+	lines.append("  - Avg low-STA turns (<=1): %.2f" % float(metrics.get("per_match", {}).get("avg_low_sta_turns", 0.0)))
+	lines.append("  - Avg zero-STA turns: %.2f" % float(metrics.get("per_match", {}).get("avg_zero_sta_turns", 0.0)))
+	lines.append("  - End-state (wins): HP %.2f | STA %.2f" % [
+		float(metrics.get("outcome_end_state_averages", {}).get("wins", {}).get("remaining_hp", 0.0)),
+		float(metrics.get("outcome_end_state_averages", {}).get("wins", {}).get("remaining_sta", 0.0)),
+	])
+	lines.append("  - End-state (losses): HP %.2f | STA %.2f" % [
+		float(metrics.get("outcome_end_state_averages", {}).get("losses", {}).get("remaining_hp", 0.0)),
+		float(metrics.get("outcome_end_state_averages", {}).get("losses", {}).get("remaining_sta", 0.0)),
+	])
+	lines.append("  - Ability usage:")
+	lines.append_array(_indent_lines(_sorted_count_lines(metrics.get("ability_usage_counts", {})), 4))
+	lines.append("  - Status applications received:")
+	lines.append_array(_indent_lines(_sorted_count_lines(metrics.get("status_application_counts", {})), 4))
+	lines.append("  - Status uptime turns:")
+	lines.append_array(_indent_lines(_sorted_count_lines(metrics.get("status_uptime_turns", {})), 4))
+	return lines
+
+func _indent_lines(lines: Array[String], spaces: int) -> Array[String]:
+	var prefixed: Array[String] = []
+	var prefix: String = " ".repeat(spaces)
+	for line in lines:
+		prefixed.append("%s%s" % [prefix, line])
+	return prefixed

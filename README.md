@@ -43,6 +43,15 @@ The combat viewer now includes a **Batch Balance Harness** panel that runs many 
 - Terminal condition counts (`HP_ZERO`, `MAX_TURNS_ABORT`, etc.)
 - Ability usage frequency (per skill/action)
 - Status application frequency (per status ID)
+- Per-fighter diagnostic telemetry:
+  - avg damage dealt/taken per match
+  - avg stamina spent per match
+  - avg turns survived
+  - avg low/zero stamina turns
+  - hit/miss totals
+  - per-fighter ability usage
+  - per-fighter status applications and uptime turns
+  - remaining HP/STA split by wins vs losses
 
 ### Determinism and safeguards
 
@@ -97,3 +106,9 @@ godot4 --headless --script res://tests/combat/test_vertical_slice.gd
 Coverage includes deterministic replay, terminal resolution, stepped-vs-full parity, status duration behavior, stamina interactions, and fight end conditions.
 
 Batch harness tests are included in the same script, covering deterministic batch outputs, progressive seeding, accounting consistency, turn-stat validity, and parity against a manual seeded loop.
+
+To run the standard 1000-run matchup set for tuning (if Godot CLI is available):
+
+```bash
+godot4 --headless --script res://tests/combat/run_standard_batches.gd
+```

@@ -113,6 +113,7 @@ func _test_batch_deterministic_results(registry: ContentRegistry) -> void:
 	assert(run_a.action_usage_counts == run_b.action_usage_counts)
 	assert(run_a.status_application_counts == run_b.status_application_counts)
 	assert(run_a.terminal_condition_counts == run_b.terminal_condition_counts)
+	assert(run_a.fighters == run_b.fighters)
 
 func _test_batch_progressive_seed_behavior(registry: ContentRegistry) -> void:
 	var simulator: CombatBatchSimulator = _make_batch_simulator(registry)
@@ -150,6 +151,12 @@ func _test_batch_parity_with_manual_loop(registry: ContentRegistry) -> void:
 		"unresolved": 0,
 		"total_turns": 0,
 		"action_usage_counts": {},
+		"damage_dealt_by_a": 0,
+		"damage_dealt_by_b": 0,
+		"hit_count_a": 0,
+		"hit_count_b": 0,
+		"miss_count_a": 0,
+		"miss_count_b": 0,
 	}
 	for offset in range(runs):
 		var seed: int = start_seed + offset
@@ -167,6 +174,21 @@ func _test_batch_parity_with_manual_loop(registry: ContentRegistry) -> void:
 				continue
 			var skill_id: String = str(event.get("skill_id", "UNKNOWN_ACTION"))
 			action_counts[skill_id] = int(action_counts.get(skill_id, 0)) + 1
+			var actor_side_id: String = str(event.get("actor_side_id", ""))
+			var damage: int = int(event.get("damage", 0))
+			var hit: bool = bool(event.get("hit", false))
+			if actor_side_id == "A":
+				manual.damage_dealt_by_a = int(manual.damage_dealt_by_a) + damage
+				if hit:
+					manual.hit_count_a = int(manual.hit_count_a) + 1
+				else:
+					manual.miss_count_a = int(manual.miss_count_a) + 1
+			elif actor_side_id == "B":
+				manual.damage_dealt_by_b = int(manual.damage_dealt_by_b) + damage
+				if hit:
+					manual.hit_count_b = int(manual.hit_count_b) + 1
+				else:
+					manual.miss_count_b = int(manual.miss_count_b) + 1
 		manual.action_usage_counts = action_counts
 
 	assert(int(batch_result.wins.attacker) == int(manual.attacker_wins))
@@ -174,6 +196,12 @@ func _test_batch_parity_with_manual_loop(registry: ContentRegistry) -> void:
 	assert(int(batch_result.wins.draws_or_unresolved) == int(manual.unresolved))
 	assert(is_equal_approx(float(batch_result.turn_stats.average), float(manual.total_turns) / float(runs)))
 	assert(batch_result.action_usage_counts == manual.action_usage_counts)
+	assert(int(batch_result.fighters.attacker.damage_dealt_total) == int(manual.damage_dealt_by_a))
+	assert(int(batch_result.fighters.defender.damage_dealt_total) == int(manual.damage_dealt_by_b))
+	assert(int(batch_result.fighters.attacker.hit_count) == int(manual.hit_count_a))
+	assert(int(batch_result.fighters.defender.hit_count) == int(manual.hit_count_b))
+	assert(int(batch_result.fighters.attacker.miss_count) == int(manual.miss_count_a))
+	assert(int(batch_result.fighters.defender.miss_count) == int(manual.miss_count_b))
 
 func _test_mirror_match_fairness_smoke(registry: ContentRegistry) -> void:
 	var simulator: CombatBatchSimulator = _make_batch_simulator(registry)
