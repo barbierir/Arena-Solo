@@ -1,5 +1,29 @@
 {
   "entries": {
+    "BLEEDING": {
+      "id": "BLEEDING",
+      "display_name": "Bleeding",
+      "stack_rule": "Refresh",
+      "atk_mod": 0,
+      "def_mod": 0,
+      "spd_mod": 0,
+      "sta_regen_mod": 0,
+      "dot_damage": 2,
+      "skip_turn": false,
+      "duration_source": "Skill"
+    },
+    "STUNNED": {
+      "id": "STUNNED",
+      "display_name": "Stunned",
+      "stack_rule": "Replace",
+      "atk_mod": 0,
+      "def_mod": 0,
+      "spd_mod": 0,
+      "sta_regen_mod": 0,
+      "dot_damage": 0,
+      "skip_turn": true,
+      "duration_source": "Skill"
+    },
     "ENTANGLED": {
       "id": "ENTANGLED",
       "display_name": "Entangled",
@@ -11,6 +35,18 @@
       "dot_damage": 0,
       "skip_turn": false,
       "duration_source": "Skill"
+    },
+    "EXHAUSTED": {
+      "id": "EXHAUSTED",
+      "display_name": "Exhausted",
+      "stack_rule": "Replace",
+      "atk_mod": -2,
+      "def_mod": 0,
+      "spd_mod": -2,
+      "sta_regen_mod": -1,
+      "dot_damage": 0,
+      "skip_turn": false,
+      "duration_source": "Runtime"
     }
   }
 }
