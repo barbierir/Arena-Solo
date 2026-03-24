@@ -12,6 +12,9 @@ var winner_combatant_id: String = ""
 var current_actor_id: String = ""
 var next_actor_id: String = ""
 
+const ATTACKER_SIDE_ID: String = "A"
+const DEFENDER_SIDE_ID: String = "B"
+
 func append_log(entry: String) -> void:
 	combat_log.append(entry)
 
@@ -23,3 +26,12 @@ func append_event(event_type: String, payload: Dictionary = {}) -> void:
 	for key_variant in payload.keys():
 		event[str(key_variant)] = payload[key_variant]
 	combat_events.append(event)
+
+func attacker_state() -> CombatantRuntimeState:
+	return combatant_states.get(ATTACKER_SIDE_ID)
+
+func defender_state() -> CombatantRuntimeState:
+	return combatant_states.get(DEFENDER_SIDE_ID)
+
+func other_side_id(side_id: String) -> String:
+	return DEFENDER_SIDE_ID if side_id == ATTACKER_SIDE_ID else ATTACKER_SIDE_ID

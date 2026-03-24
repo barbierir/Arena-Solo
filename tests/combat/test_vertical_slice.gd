@@ -23,6 +23,10 @@ func _initialize() -> void:
 	_test_batch_aggregate_accounting(registry)
 	_test_batch_turn_stats_validity(registry)
 	_test_batch_parity_with_manual_loop(registry)
+	_test_mirror_match_fairness_smoke(registry)
+	_test_seat_swap_consistency(registry)
+	_test_no_extra_action_after_lethal(registry)
+	_test_turn_lifecycle_symmetry(registry)
 	print("All combat-core tests passed")
 	quit(0)
 
@@ -171,6 +175,57 @@ func _test_batch_parity_with_manual_loop(registry: ContentRegistry) -> void:
 	assert(is_equal_approx(float(batch_result.turn_stats.average), float(manual.total_turns) / float(runs)))
 	assert(batch_result.action_usage_counts == manual.action_usage_counts)
 
+func _test_mirror_match_fairness_smoke(registry: ContentRegistry) -> void:
+	var simulator: CombatBatchSimulator = _make_batch_simulator(registry)
+	var sec_mirror: Dictionary = simulator.run_batch("SEC_STARTER", "SEC_STARTER", 6100, 120, DEFAULT_TURN_CAP)
+	var ret_mirror: Dictionary = simulator.run_batch("RET_STARTER", "RET_STARTER", 7100, 120, DEFAULT_TURN_CAP)
+	_assert_not_extreme_side_bias(sec_mirror, "Secutor mirror")
+	_assert_not_extreme_side_bias(ret_mirror, "Retiarius mirror")
+
+func _test_seat_swap_consistency(registry: ContentRegistry) -> void:
+	var simulator: CombatBatchSimulator = _make_batch_simulator(registry)
+	var ret_as_a: Dictionary = simulator.run_batch("RET_STARTER", "SEC_STARTER", 8100, 150, DEFAULT_TURN_CAP)
+	var sec_as_a: Dictionary = simulator.run_batch("SEC_STARTER", "RET_STARTER", 8100, 150, DEFAULT_TURN_CAP)
+	var retiarius_as_a_wins: int = int(ret_as_a.wins.attacker)
+	var retiarius_as_b_wins: int = int(sec_as_a.wins.defender)
+	var secutor_as_b_wins: int = int(ret_as_a.wins.defender)
+	var secutor_as_a_wins: int = int(sec_as_a.wins.attacker)
+	var retiarius_seat_gap: int = abs(retiarius_as_a_wins - retiarius_as_b_wins)
+	var secutor_seat_gap: int = abs(secutor_as_a_wins - secutor_as_b_wins)
+	assert(retiarius_seat_gap <= 30)
+	assert(secutor_seat_gap <= 30)
+
+func _test_no_extra_action_after_lethal(registry: ContentRegistry) -> void:
+	var run_data: Dictionary = _run_fight_with_events(registry, 1001, DEFAULT_TURN_CAP)
+	var combat_ended_turn: int = -1
+	for event in run_data.events:
+		if str(event.get("type", "")) == "COMBAT_ENDED":
+			combat_ended_turn = int(event.get("turn_index", -1))
+			break
+	assert(combat_ended_turn >= 0)
+	for event in run_data.events:
+		if str(event.get("type", "")) != "ACTION_USED":
+			continue
+		assert(int(event.get("turn_index", -1)) <= combat_ended_turn)
+
+func _test_turn_lifecycle_symmetry(registry: ContentRegistry) -> void:
+	var run_data: Dictionary = _run_fight_with_events(registry, 4242, DEFAULT_TURN_CAP)
+	var start_counts: Dictionary = {"A": 0, "B": 0}
+	var end_counts: Dictionary = {"A": 0, "B": 0}
+	for event in run_data.events:
+		if str(event.get("type", "")) != "TURN_TELEMETRY":
+			continue
+		var phase: String = str(event.get("phase", ""))
+		var side_id: String = str(event.get("actor_side_id", ""))
+		if phase == "START_OF_TURN":
+			start_counts[side_id] = int(start_counts.get(side_id, 0)) + 1
+		elif phase == "END_OF_TURN":
+			end_counts[side_id] = int(end_counts.get(side_id, 0)) + 1
+	assert(abs(int(start_counts.get("A", 0)) - int(start_counts.get("B", 0))) <= 1)
+	assert(abs(int(end_counts.get("A", 0)) - int(end_counts.get("B", 0))) <= 1)
+	assert(int(start_counts.get("A", 0)) == int(end_counts.get("A", 0)) or int(start_counts.get("A", 0)) == int(end_counts.get("A", 0)) + 1)
+	assert(int(start_counts.get("B", 0)) == int(end_counts.get("B", 0)) or int(start_counts.get("B", 0)) == int(end_counts.get("B", 0)) + 1)
+
 func _run_fight(registry: ContentRegistry, seed: int, use_steps: bool) -> Dictionary:
 	var simulation: CombatSimulation = COMBAT_SIMULATION_SCRIPT.new()
 	var rng: SeededRngService = RNG_SERVICE_SCRIPT.new(seed)
@@ -185,8 +240,8 @@ func _run_fight(registry: ContentRegistry, seed: int, use_steps: bool) -> Dictio
 		simulation.run_to_completion(DEFAULT_TURN_CAP)
 
 	var runtime_state: CombatRuntimeState = simulation.get_runtime_state()
-	var attacker: CombatantRuntimeState = runtime_state.combatant_states.get(runtime_state.attacker_build_id)
-	var defender: CombatantRuntimeState = runtime_state.combatant_states.get(runtime_state.defender_build_id)
+	var attacker: CombatantRuntimeState = runtime_state.attacker_state()
+	var defender: CombatantRuntimeState = runtime_state.defender_state()
 	assert(runtime_state.result_state != "PENDING")
 	return {
 		"result_state": runtime_state.result_state,
@@ -211,6 +266,15 @@ func _run_fight_with_events(registry: ContentRegistry, seed: int, max_turns: int
 		"turn_count": runtime_state.turn_index,
 		"events": runtime_state.combat_events,
 	}
+
+func _assert_not_extreme_side_bias(batch_result: Dictionary, label: String) -> void:
+	var attacker_wins: int = int(batch_result.get("wins", {}).get("attacker", 0))
+	var defender_wins: int = int(batch_result.get("wins", {}).get("defender", 0))
+	var decided: int = attacker_wins + defender_wins
+	if decided == 0:
+		return
+	var attacker_ratio: float = float(attacker_wins) / float(decided)
+	assert(attacker_ratio > 0.05 and attacker_ratio < 0.95, "%s appears seat-biased: %.3f" % [label, attacker_ratio])
 
 func _make_batch_simulator(registry: ContentRegistry) -> CombatBatchSimulator:
 	var simulator: CombatBatchSimulator = COMBAT_BATCH_SIMULATOR_SCRIPT.new()

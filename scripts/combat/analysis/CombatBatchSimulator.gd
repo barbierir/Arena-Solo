@@ -37,8 +37,8 @@ func run_batch(attacker_build_id: String, defender_build_id: String, start_seed:
 		simulation.configure(_content_registry, rng)
 		simulation.initialize_fight(attacker_build_id, defender_build_id)
 		var runtime_state: CombatRuntimeState = simulation.run_to_completion(max_turns)
-		var attacker_state: CombatantRuntimeState = runtime_state.combatant_states.get(attacker_build_id)
-		var defender_state: CombatantRuntimeState = runtime_state.combatant_states.get(defender_build_id)
+		var attacker_state: CombatantRuntimeState = runtime_state.attacker_state()
+		var defender_state: CombatantRuntimeState = runtime_state.defender_state()
 		var fight_turns: int = runtime_state.turn_index
 
 		total_turns += fight_turns

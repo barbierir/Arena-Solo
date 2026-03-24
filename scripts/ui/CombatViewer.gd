@@ -81,8 +81,8 @@ func selected_defender_build_id() -> String:
 func render_state(runtime_state: CombatRuntimeState) -> void:
 	if runtime_state == null:
 		return
-	var attacker: CombatantRuntimeState = runtime_state.combatant_states.get(runtime_state.attacker_build_id)
-	var defender: CombatantRuntimeState = runtime_state.combatant_states.get(runtime_state.defender_build_id)
+	var attacker: CombatantRuntimeState = runtime_state.attacker_state()
+	var defender: CombatantRuntimeState = runtime_state.defender_state()
 
 	attacker_name_label.text = attacker.display_name
 	attacker_hp_label.text = "HP: %d/%d" % [attacker.current_hp, attacker.max_hp]

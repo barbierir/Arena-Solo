@@ -42,10 +42,36 @@ func resolve_turn(runtime_state: CombatRuntimeState, actor_id: String) -> void:
 		return
 
 	actor.temporary_defense_bonus = 0
+	var actor_statuses_before: String = actor.status_labels(statuses)
+	var actor_hp_before: int = actor.current_hp
+	var actor_sta_before: int = actor.current_sta
+	var target_statuses_before: String = target.status_labels(statuses)
+	var target_hp_before: int = target.current_hp
+	var target_sta_before: int = target.current_sta
 	var regen: int = _stamina_system.apply_turn_regen(actor, controls, statuses)
 	runtime_state.append_log("%s regenerates %d STA -> %d/%d." % [actor.display_name, regen, actor.current_sta, actor.max_sta])
 	_status_system.update_exhausted(actor)
 	_tick_cooldowns(actor)
+	runtime_state.append_event("TURN_TELEMETRY", {
+		"phase": "START_OF_TURN",
+		"actor_side_id": actor.combatant_id,
+		"actor_build_id": actor.build_id,
+		"actor_hp_before": actor_hp_before,
+		"actor_sta_before": actor_sta_before,
+		"actor_hp_after": actor.current_hp,
+		"actor_sta_after": actor.current_sta,
+		"actor_statuses_before": actor_statuses_before,
+		"actor_statuses_after": actor.status_labels(statuses),
+		"target_side_id": target.combatant_id,
+		"target_build_id": target.build_id,
+		"target_hp_before": target_hp_before,
+		"target_sta_before": target_sta_before,
+		"target_hp_after": target.current_hp,
+		"target_sta_after": target.current_sta,
+		"target_statuses_before": target_statuses_before,
+		"target_statuses_after": target.status_labels(statuses),
+		"stamina_regen": regen,
+	})
 
 	if not _status_system.can_act(actor, statuses):
 		runtime_state.append_log("%s is stunned and loses the turn." % actor.display_name)
@@ -54,6 +80,7 @@ func resolve_turn(runtime_state: CombatRuntimeState, actor_id: String) -> void:
 		if skip_dot > 0:
 			runtime_state.append_log("%s takes %d DOT damage." % [actor.display_name, skip_dot])
 		_victory_resolver.resolve_if_decided(runtime_state)
+		_append_end_of_turn_telemetry(runtime_state, actor, target, statuses, skip_dot)
 		return
 
 	var skill_id: String = _choose_action(actor, target, runtime_state)
@@ -63,12 +90,16 @@ func resolve_turn(runtime_state: CombatRuntimeState, actor_id: String) -> void:
 		skill_id = "RECOVER"
 
 	_execute_action(runtime_state, actor, target, skill_id, skill, controls, statuses)
+	if runtime_state.result_state != "PENDING":
+		_append_end_of_turn_telemetry(runtime_state, actor, target, statuses, 0)
+		return
 	_status_system.tick_status_durations(actor)
 	_status_system.update_exhausted(actor)
 	var dot: int = _status_system.apply_end_of_turn_effects(actor, statuses)
 	if dot > 0:
 		runtime_state.append_log("%s takes %d DOT damage." % [actor.display_name, dot])
 	_victory_resolver.resolve_if_decided(runtime_state)
+	_append_end_of_turn_telemetry(runtime_state, actor, target, statuses, dot)
 
 func _choose_action(actor: CombatantRuntimeState, target: CombatantRuntimeState, runtime_state: CombatRuntimeState) -> String:
 	if actor.class_id == "SECUTOR":
@@ -142,6 +173,19 @@ func _execute_action(runtime_state: CombatRuntimeState, actor: CombatantRuntimeS
 		"damage": damage,
 		"is_crit": bool(resolved.is_crit),
 	})
+	_victory_resolver.resolve_if_decided(runtime_state)
+	if runtime_state.result_state != "PENDING":
+		runtime_state.append_event("TURN_TELEMETRY", {
+			"phase": "POST_LETHAL_CHECK",
+			"actor_side_id": actor.combatant_id,
+			"actor_build_id": actor.build_id,
+			"target_side_id": target.combatant_id,
+			"target_build_id": target.build_id,
+			"target_hp_after_action": target.current_hp,
+			"combat_ended_immediately": true,
+			"terminal_result_state": runtime_state.result_state,
+		})
+		return
 
 	var status_id: String = str(skill.get("apply_status_id", ""))
 	if status_id != "":
@@ -178,6 +222,21 @@ func _tick_cooldowns(actor: CombatantRuntimeState) -> void:
 	actor.cooldowns = next
 
 func _other_combatant(runtime_state: CombatRuntimeState, actor_id: String) -> CombatantRuntimeState:
-	if actor_id == runtime_state.attacker_build_id:
-		return runtime_state.combatant_states.get(runtime_state.defender_build_id)
-	return runtime_state.combatant_states.get(runtime_state.attacker_build_id)
+	return runtime_state.combatant_states.get(runtime_state.other_side_id(actor_id))
+
+func _append_end_of_turn_telemetry(runtime_state: CombatRuntimeState, actor: CombatantRuntimeState, target: CombatantRuntimeState, status_defs: Dictionary, dot_damage: int) -> void:
+	runtime_state.append_event("TURN_TELEMETRY", {
+		"phase": "END_OF_TURN",
+		"actor_side_id": actor.combatant_id,
+		"actor_build_id": actor.build_id,
+		"actor_hp_after": actor.current_hp,
+		"actor_sta_after": actor.current_sta,
+		"actor_statuses_after": actor.status_labels(status_defs),
+		"target_side_id": target.combatant_id,
+		"target_build_id": target.build_id,
+		"target_hp_after": target.current_hp,
+		"target_sta_after": target.current_sta,
+		"target_statuses_after": target.status_labels(status_defs),
+		"dot_damage_applied": dot_damage,
+		"terminal_result_state": runtime_state.result_state,
+	})
