@@ -1,0 +1,21 @@
+{
+  "id": "COMBAT_CONTROLS",
+  "entries": {
+    "COMBAT_CONTROLS": {
+      "base_hit_chance": 0.7,
+      "hit_delta_per_point": 0.02,
+      "min_hit_chance": 0.1,
+      "max_hit_chance": 0.95,
+      "dodge_bonus_if_defender_spd_lead_gte5": 0.15,
+      "base_crit_chance": 0.05,
+      "crit_per_skl": 0.01,
+      "crit_chance_cap": 0.5,
+      "crit_multiplier": 2.0,
+      "min_damage": 1,
+      "base_stamina_regen": 2,
+      "recover_bonus_stamina": 2,
+      "defend_bonus_def": 2,
+      "bleed_damage_per_turn": 2
+    }
+  }
+}

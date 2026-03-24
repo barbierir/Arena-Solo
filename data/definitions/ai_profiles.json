@@ -1,0 +1,16 @@
+{
+  "entries": {
+    "AI_SEC_STARTER": {
+      "id": "AI_SEC_STARTER",
+      "display_name": "Secutor Starter AI",
+      "policy": "SECUTOR_STARTER_POLICY",
+      "preferred_skills": ["SHIELD_BASH", "BASIC_ATTACK", "DEFEND", "RECOVER"]
+    },
+    "AI_RET_STARTER": {
+      "id": "AI_RET_STARTER",
+      "display_name": "Retiarius Starter AI",
+      "policy": "RETIARIUS_STARTER_POLICY",
+      "preferred_skills": ["NET_THROW", "BASIC_ATTACK", "DEFEND", "RECOVER"]
+    }
+  }
+}

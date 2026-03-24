@@ -1,0 +1,60 @@
+{
+  "entries": {
+    "TRIDENT_START": {
+      "id": "TRIDENT_START",
+      "display_name": "Starter Trident",
+      "slot": "Weapon",
+      "allowed_class_ids": ["RETIARIUS"],
+      "atk_mod": 2,
+      "def_mod": 0,
+      "spd_mod": 0,
+      "skl_mod": 1,
+      "hp_mod": 0,
+      "sta_mod": 0,
+      "hit_mod_pct": 0.0,
+      "crit_mod_pct": 0.0
+    },
+    "NET_START": {
+      "id": "NET_START",
+      "display_name": "Starter Net",
+      "slot": "Offhand",
+      "allowed_class_ids": ["RETIARIUS"],
+      "atk_mod": 0,
+      "def_mod": 0,
+      "spd_mod": 0,
+      "skl_mod": 1,
+      "hp_mod": 0,
+      "sta_mod": 0,
+      "hit_mod_pct": 0.1,
+      "crit_mod_pct": 0.0
+    },
+    "GLADIUS_START": {
+      "id": "GLADIUS_START",
+      "display_name": "Starter Gladius",
+      "slot": "Weapon",
+      "allowed_class_ids": ["SECUTOR"],
+      "atk_mod": 2,
+      "def_mod": 0,
+      "spd_mod": 0,
+      "skl_mod": 0,
+      "hp_mod": 0,
+      "sta_mod": 0,
+      "hit_mod_pct": 0.0,
+      "crit_mod_pct": 0.0
+    },
+    "TOWER_SHIELD_START": {
+      "id": "TOWER_SHIELD_START",
+      "display_name": "Starter Tower Shield",
+      "slot": "Offhand",
+      "allowed_class_ids": ["SECUTOR"],
+      "atk_mod": 0,
+      "def_mod": 2,
+      "spd_mod": -1,
+      "skl_mod": 0,
+      "hp_mod": 0,
+      "sta_mod": 0,
+      "hit_mod_pct": 0.0,
+      "crit_mod_pct": 0.0
+    }
+  }
+}

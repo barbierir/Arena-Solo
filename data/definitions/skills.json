@@ -1,0 +1,30 @@
+{
+  "entries": {
+    "NET_THROW": {
+      "id": "NET_THROW",
+      "display_name": "Net Throw",
+      "usable_by": ["RETIARIUS"],
+      "sta_cost": 3,
+      "accuracy_mod_pct": 0.0,
+      "flat_damage": 0,
+      "crit_bonus_pct": 0.0,
+      "self_def_mod": 0,
+      "apply_status_id": "ENTANGLED",
+      "status_turns": 2,
+      "cooldown_turns": 2
+    },
+    "SHIELD_BASH": {
+      "id": "SHIELD_BASH",
+      "display_name": "Shield Bash",
+      "usable_by": ["SECUTOR"],
+      "sta_cost": 2,
+      "accuracy_mod_pct": 0.0,
+      "flat_damage": -1,
+      "crit_bonus_pct": 0.0,
+      "self_def_mod": 0,
+      "apply_status_id": "STUNNED",
+      "status_turns": 1,
+      "cooldown_turns": 2
+    }
+  }
+}
