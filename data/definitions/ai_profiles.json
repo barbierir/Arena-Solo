@@ -1,16 +1,12 @@
 {
   "entries": {
-    "AI_SEC_STARTER": {
-      "id": "AI_SEC_STARTER",
-      "display_name": "Secutor Starter AI",
-      "policy": "SECUTOR_STARTER_POLICY",
-      "preferred_skills": ["SHIELD_BASH", "BASIC_ATTACK", "DEFEND", "RECOVER"]
-    },
-    "AI_RET_STARTER": {
-      "id": "AI_RET_STARTER",
-      "display_name": "Retiarius Starter AI",
-      "policy": "RETIARIUS_STARTER_POLICY",
-      "preferred_skills": ["NET_THROW", "BASIC_ATTACK", "DEFEND", "RECOVER"]
+    "STARTER_DUEL_AI": {
+      "id": "STARTER_DUEL_AI",
+      "display_name": "Starter Duel AI",
+      "recover_at_or_below_sta": 2,
+      "prefer_kill_threshold_hp": 3,
+      "allow_status_setup": true,
+      "priority_rules": ["KILL_IF_POSSIBLE", "STATUS_SETUP", "BASIC_ATTACK", "DEFEND", "RECOVER"]
     }
   }
 }

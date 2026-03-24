@@ -1,7 +1,7 @@
 {
-  "id": "COMBAT_CONTROLS",
   "entries": {
     "COMBAT_CONTROLS": {
+      "id": "COMBAT_CONTROLS",
       "base_hit_chance": 0.7,
       "hit_delta_per_point": 0.02,
       "min_hit_chance": 0.1,
@@ -15,6 +15,9 @@
       "base_stamina_regen": 2,
       "recover_bonus_stamina": 2,
       "defend_bonus_def": 2,
+      "exhausted_atk_penalty": -2,
+      "exhausted_spd_penalty": -2,
+      "exhausted_sta_regen_penalty": -1,
       "bleed_damage_per_turn": 2
     }
   }
