@@ -23,17 +23,34 @@ var status_defs: Dictionary = {}
 @onready var step_turn_button: Button = %StepTurnButton
 @onready var run_fight_button: Button = %RunFightButton
 @onready var replay_button: Button = %ReplayButton
+@onready var batch_seed_input: LineEdit = %BatchSeedInput
+@onready var batch_count_input: LineEdit = %BatchCountInput
+@onready var batch_max_turns_input: LineEdit = %BatchMaxTurnsInput
+@onready var run_batch_button: Button = %RunBatchButton
+@onready var batch_summary_label: Label = %BatchSummaryLabel
+@onready var batch_results_label: RichTextLabel = %BatchResultsLabel
 
-func connect_actions(on_run: Callable, on_step_turn: Callable, on_replay: Callable) -> void:
+func connect_actions(on_run: Callable, on_step_turn: Callable, on_replay: Callable, on_run_batch: Callable) -> void:
 	run_fight_button.pressed.connect(on_run)
 	step_turn_button.pressed.connect(on_step_turn)
 	replay_button.pressed.connect(on_replay)
+	run_batch_button.pressed.connect(on_run_batch)
 
 func seed_value() -> int:
 	return int(seed_input.text)
 
 func set_seed_value(value: int) -> void:
 	seed_input.text = str(value)
+	batch_seed_input.text = str(value)
+
+func batch_seed_value() -> int:
+	return int(batch_seed_input.text)
+
+func batch_count_value() -> int:
+	return maxi(0, int(batch_count_input.text))
+
+func batch_max_turns_value() -> int:
+	return maxi(1, int(batch_max_turns_input.text))
 
 func set_status_definitions(definitions: Dictionary) -> void:
 	status_defs = definitions
@@ -83,6 +100,66 @@ func render_state(runtime_state: CombatRuntimeState) -> void:
 	combat_log_box.text = "\n".join(runtime_state.combat_log)
 	step_turn_button.disabled = runtime_state.result_state != "PENDING"
 
+func render_batch_results(batch_result: Dictionary, build_entries: Dictionary) -> void:
+	var total_runs: int = int(batch_result.get("total_runs", 0))
+	var attacker_id: String = str(batch_result.get("inputs", {}).get("attacker_build_id", ""))
+	var defender_id: String = str(batch_result.get("inputs", {}).get("defender_build_id", ""))
+	var attacker_name: String = _build_display_label(build_entries, attacker_id)
+	var defender_name: String = _build_display_label(build_entries, defender_id)
+	var attacker_wins: int = int(batch_result.get("wins", {}).get("attacker", 0))
+	var defender_wins: int = int(batch_result.get("wins", {}).get("defender", 0))
+	var attacker_win_rate: float = float(batch_result.get("win_rates", {}).get("attacker_pct", 0.0))
+	var avg_turns: float = float(batch_result.get("turn_stats", {}).get("average", 0.0))
+	batch_summary_label.text = "%s won %d/%d (%.1f%%), %s won %d/%d (%.1f%%), avg %.2f turns." % [
+		attacker_name,
+		attacker_wins,
+		total_runs,
+		attacker_win_rate,
+		defender_name,
+		defender_wins,
+		total_runs,
+		float(batch_result.get("win_rates", {}).get("defender_pct", 0.0)),
+		avg_turns,
+	]
+
+	var lines: Array[String] = []
+	lines.append("Inputs:")
+	lines.append("- A: %s (%s)" % [attacker_name, attacker_id])
+	lines.append("- B: %s (%s)" % [defender_name, defender_id])
+	lines.append("- Start Seed: %d" % int(batch_result.get("inputs", {}).get("start_seed", 0)))
+	lines.append("- Simulations: %d" % total_runs)
+	lines.append("- Max Turns/Fight: %d" % int(batch_result.get("inputs", {}).get("max_turns", 0)))
+	lines.append("")
+	lines.append("Outcomes:")
+	lines.append("- A wins: %d (%.2f%%)" % [attacker_wins, attacker_win_rate])
+	lines.append("- B wins: %d (%.2f%%)" % [defender_wins, float(batch_result.get("win_rates", {}).get("defender_pct", 0.0))])
+	lines.append("- Draws/Unresolved: %d" % int(batch_result.get("wins", {}).get("draws_or_unresolved", 0)))
+	lines.append("")
+	lines.append("Turn Stats:")
+	lines.append("- Average turns: %.2f" % avg_turns)
+	lines.append("- Min turns: %d" % int(batch_result.get("turn_stats", {}).get("min", 0)))
+	lines.append("- Max turns: %d" % int(batch_result.get("turn_stats", {}).get("max", 0)))
+	lines.append("")
+	lines.append("End State Averages:")
+	lines.append("- A HP: %.2f | A STA: %.2f" % [
+		float(batch_result.get("end_state_averages", {}).get("attacker", {}).get("remaining_hp", 0.0)),
+		float(batch_result.get("end_state_averages", {}).get("attacker", {}).get("remaining_sta", 0.0)),
+	])
+	lines.append("- B HP: %.2f | B STA: %.2f" % [
+		float(batch_result.get("end_state_averages", {}).get("defender", {}).get("remaining_hp", 0.0)),
+		float(batch_result.get("end_state_averages", {}).get("defender", {}).get("remaining_sta", 0.0)),
+	])
+	lines.append("")
+	lines.append("Terminal Conditions:")
+	lines.append_array(_sorted_count_lines(batch_result.get("terminal_condition_counts", {})))
+	lines.append("")
+	lines.append("Ability Usage:")
+	lines.append_array(_sorted_count_lines(batch_result.get("action_usage_counts", {})))
+	lines.append("")
+	lines.append("Status Applications:")
+	lines.append_array(_sorted_count_lines(batch_result.get("status_application_counts", {})))
+	batch_results_label.text = "\n".join(lines)
+
 func _selected_build_id(selector: OptionButton) -> String:
 	var selected_index: int = selector.selected
 	if selected_index < 0:
@@ -95,3 +172,27 @@ func _set_selector_to_build(selector: OptionButton, build_id: String) -> void:
 		if option_build_id == build_id:
 			selector.select(idx)
 			return
+
+func _build_display_label(build_entries: Dictionary, build_id: String) -> String:
+	var build_entry: Dictionary = build_entries.get(build_id, {})
+	return str(build_entry.get("display_name", build_id))
+
+func _sorted_count_lines(counts: Dictionary) -> Array[String]:
+	if counts.is_empty():
+		return ["- None"]
+	var entries: Array[Dictionary] = []
+	for key_variant in counts.keys():
+		var key: String = str(key_variant)
+		entries.append({
+			"key": key,
+			"count": int(counts.get(key, 0)),
+		})
+	entries.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		if int(a.count) == int(b.count):
+			return str(a.key) < str(b.key)
+		return int(a.count) > int(b.count)
+	)
+	var lines: Array[String] = []
+	for entry in entries:
+		lines.append("- %s: %d" % [str(entry.key), int(entry.count)])
+	return lines

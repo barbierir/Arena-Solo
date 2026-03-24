@@ -89,11 +89,25 @@ func _execute_action(runtime_state: CombatRuntimeState, actor: CombatantRuntimeS
 	if skill_id == "RECOVER":
 		var recovered: int = _stamina_system.recover(actor, controls)
 		runtime_state.append_log("%s uses Recover and restores %d STA." % [actor.display_name, recovered])
+		runtime_state.append_event("ACTION_USED", {
+			"actor_build_id": actor.build_id,
+			"target_build_id": target.build_id,
+			"skill_id": skill_id,
+			"hit": false,
+			"damage": 0,
+		})
 		return
 
 	if skill_id == "DEFEND":
 		actor.temporary_defense_bonus = int(controls.get("defend_bonus_def", 2))
 		runtime_state.append_log("%s uses Defend (+%d DEF until next action)." % [actor.display_name, actor.temporary_defense_bonus])
+		runtime_state.append_event("ACTION_USED", {
+			"actor_build_id": actor.build_id,
+			"target_build_id": target.build_id,
+			"skill_id": skill_id,
+			"hit": false,
+			"damage": 0,
+		})
 		return
 
 	var conditional_hit_bonus: float = _conditional_equipment_hit_bonus(actor, skill_id)
@@ -101,6 +115,13 @@ func _execute_action(runtime_state: CombatRuntimeState, actor: CombatantRuntimeS
 	var hit_roll: float = _rng_service.randf()
 	if hit_roll > hit_chance:
 		runtime_state.append_log("%s uses %s: miss (%.2f > %.2f)." % [actor.display_name, skill.get("display_name", skill_id), hit_roll, hit_chance])
+		runtime_state.append_event("ACTION_USED", {
+			"actor_build_id": actor.build_id,
+			"target_build_id": target.build_id,
+			"skill_id": skill_id,
+			"hit": false,
+			"damage": 0,
+		})
 		_set_cooldown(actor, skill_id, skill)
 		return
 
@@ -113,11 +134,25 @@ func _execute_action(runtime_state: CombatRuntimeState, actor: CombatantRuntimeS
 	if bool(resolved.is_crit):
 		crit_tag = " CRIT"
 	runtime_state.append_log("%s uses %s and hits for %d%s damage. %s HP: %d/%d." % [actor.display_name, skill.get("display_name", skill_id), damage, crit_tag, target.display_name, target.current_hp, target.max_hp])
+	runtime_state.append_event("ACTION_USED", {
+		"actor_build_id": actor.build_id,
+		"target_build_id": target.build_id,
+		"skill_id": skill_id,
+		"hit": true,
+		"damage": damage,
+		"is_crit": bool(resolved.is_crit),
+	})
 
 	var status_id: String = str(skill.get("apply_status_id", ""))
 	if status_id != "":
 		_status_system.apply_status(target, status_id, int(skill.get("status_turns", 0)), skill_id, status_defs)
 		runtime_state.append_log("%s is afflicted with %s (%d turns)." % [target.display_name, status_id, int(skill.get("status_turns", 0))])
+		runtime_state.append_event("STATUS_APPLIED", {
+			"target_build_id": target.build_id,
+			"status_id": status_id,
+			"source_skill_id": skill_id,
+			"duration_turns": int(skill.get("status_turns", 0)),
+		})
 
 	_set_cooldown(actor, skill_id, skill)
 

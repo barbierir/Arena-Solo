@@ -4,6 +4,7 @@ class_name CombatTestScreen
 const CONTENT_LOADER_SCRIPT := preload("res://scripts/data/loaders/ContentLoader.gd")
 const RNG_SERVICE_SCRIPT := preload("res://scripts/utilities/SeededRngService.gd")
 const COMBAT_SIMULATION_SCRIPT := preload("res://scripts/combat/CombatSimulation.gd")
+const COMBAT_BATCH_SIMULATOR_SCRIPT := preload("res://scripts/combat/analysis/CombatBatchSimulator.gd")
 
 @onready var viewer: CombatViewer = %CombatViewer
 
@@ -11,6 +12,7 @@ var _content_loader: ContentLoader
 var _content_registry: ContentRegistry
 var _rng_service: SeededRngService
 var _combat_simulation: CombatSimulation
+var _batch_simulator: CombatBatchSimulator
 var _last_seed: int = 1001
 var _last_attacker_build_id: String = "RET_STARTER"
 var _last_defender_build_id: String = "SEC_STARTER"
@@ -21,7 +23,9 @@ func _ready() -> void:
 	viewer.set_status_definitions(_content_registry.status_effects.get("entries", {}))
 	viewer.set_fighter_options(_content_registry.builds.get("entries", {}), _last_attacker_build_id, _last_defender_build_id)
 	viewer.set_seed_value(_last_seed)
-	viewer.connect_actions(_on_run_pressed, _on_step_turn_pressed, _on_replay_pressed)
+	viewer.connect_actions(_on_run_pressed, _on_step_turn_pressed, _on_replay_pressed, _on_run_batch_pressed)
+	_batch_simulator = COMBAT_BATCH_SIMULATOR_SCRIPT.new()
+	_batch_simulator.configure(_content_registry)
 	_start_fight(_last_seed, _last_attacker_build_id, _last_defender_build_id)
 	viewer.render_state(_combat_simulation.get_runtime_state())
 
@@ -53,6 +57,21 @@ func _on_replay_pressed() -> void:
 	_start_fight(_last_seed, _last_attacker_build_id, _last_defender_build_id)
 	_combat_simulation.run_to_completion()
 	viewer.render_state(_combat_simulation.get_runtime_state())
+
+func _on_run_batch_pressed() -> void:
+	_last_attacker_build_id = viewer.selected_attacker_build_id()
+	_last_defender_build_id = viewer.selected_defender_build_id()
+	var start_seed: int = viewer.batch_seed_value()
+	var simulation_count: int = viewer.batch_count_value()
+	var max_turns: int = viewer.batch_max_turns_value()
+	var batch_result: Dictionary = _batch_simulator.run_batch(
+		_last_attacker_build_id,
+		_last_defender_build_id,
+		start_seed,
+		simulation_count,
+		max_turns
+	)
+	viewer.render_batch_results(batch_result, _content_registry.builds.get("entries", {}))
 
 func _start_fight(match_seed: int, attacker_build_id: String, defender_build_id: String) -> void:
 	_rng_service = RNG_SERVICE_SCRIPT.new(match_seed)

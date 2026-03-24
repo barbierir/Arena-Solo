@@ -45,6 +45,11 @@ func simulate_to_completion(max_turns: int = 64) -> CombatRuntimeState:
 	if runtime_state != null and runtime_state.result_state == "PENDING":
 		runtime_state.result_state = "ABORTED"
 		runtime_state.append_log("Combat aborted after max turns (%d)." % max_turns)
+		runtime_state.append_event("COMBAT_ENDED", {
+			"terminal_condition": "MAX_TURNS_ABORT",
+			"winner_build_id": "",
+			"winner_combatant_id": "",
+		})
 	return runtime_state
 
 func run_to_completion(max_turns: int = 64) -> CombatRuntimeState:
