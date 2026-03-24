@@ -18,7 +18,8 @@
       "exhausted_atk_penalty": -2,
       "exhausted_spd_penalty": -2,
       "exhausted_sta_regen_penalty": -1,
-      "bleed_damage_per_turn": 2
+      "bleed_damage_per_turn": 2,
+      "defense_effectiveness": 0.9
     }
   }
 }
