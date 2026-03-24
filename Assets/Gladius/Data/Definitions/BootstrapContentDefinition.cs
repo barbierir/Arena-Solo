@@ -9,6 +9,6 @@ namespace Gladius.Data.Definitions
         public GladiatorDefinition[] gladiators;
         public EquipmentDefinition[] equipment;
         public SkillDefinition[] skills;
-        public StatusEffectDefinition[] statuses;
+        public StatusEffectDefinition[] statusEffects;
     }
 }

@@ -1,0 +1,16 @@
+{
+  "equipment": [
+    {
+      "id": "NET_AND_TRIDENT",
+      "slot": "WEAPON",
+      "attackBonus": 1,
+      "defenseBonus": 0
+    },
+    {
+      "id": "GLADIUS_AND_SHIELD",
+      "slot": "WEAPON",
+      "attackBonus": 1,
+      "defenseBonus": 1
+    }
+  ]
+}

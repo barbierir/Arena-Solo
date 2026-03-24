@@ -1,3 +1,4 @@
+using Gladius.Combat.Results;
 using Gladius.Data.Definitions;
 using Gladius.Data.Runtime;
 
@@ -12,10 +13,11 @@ namespace Gladius.Combat.Systems
             _minDamage = controls.MinDamage;
         }
 
-        public int Calculate(GladiatorRuntimeState attacker, GladiatorRuntimeState defender)
+        public DamageResult Calculate(GladiatorRuntimeState attacker, GladiatorRuntimeState defender)
         {
             var raw = attacker.Attack - defender.Defense;
-            return raw < _minDamage ? _minDamage : raw;
+            var final = raw < _minDamage ? _minDamage : raw;
+            return new DamageResult(raw, _minDamage, final);
         }
     }
 }

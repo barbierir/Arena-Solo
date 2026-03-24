@@ -1,0 +1,18 @@
+{
+  "skills": [
+    {
+      "id": "RET_NET_CAST",
+      "ownerClassId": "RETIARIUS",
+      "staminaCost": 3,
+      "targetType": "Enemy",
+      "effectId": "SNARED"
+    },
+    {
+      "id": "SEC_SHIELD_BASH",
+      "ownerClassId": "SECUTOR",
+      "staminaCost": 2,
+      "targetType": "Enemy",
+      "effectId": "STAGGERED"
+    }
+  ]
+}
