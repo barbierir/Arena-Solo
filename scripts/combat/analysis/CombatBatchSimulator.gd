@@ -3,6 +3,7 @@ class_name CombatBatchSimulator
 
 const COMBAT_SIMULATION_SCRIPT := preload("res://scripts/combat/CombatSimulation.gd")
 const RNG_SERVICE_SCRIPT := preload("res://scripts/utilities/SeededRngService.gd")
+const REPORTS_DIR: String = "user://batch_reports"
 
 var _content_registry: ContentRegistry
 
@@ -289,3 +290,263 @@ func _other_side_id(side_id: String) -> String:
 
 func _increment_count(target: Dictionary, key: String) -> void:
 	target[key] = int(target.get(key, 0)) + 1
+
+func batch_result_to_report_dict(batch_result: Dictionary, build_entries: Dictionary = {}, exported_at_iso_utc: String = "") -> Dictionary:
+	var inputs: Dictionary = batch_result.get("inputs", {})
+	var attacker_id: String = str(inputs.get("attacker_build_id", ""))
+	var defender_id: String = str(inputs.get("defender_build_id", ""))
+	return {
+		"metadata": {
+			"report_version": 1,
+			"exported_at_utc": exported_at_iso_utc,
+			"attacker_display_name": _build_display_label(build_entries, attacker_id),
+			"defender_display_name": _build_display_label(build_entries, defender_id),
+		},
+		"batch_result": batch_result,
+	}
+
+func format_batch_result_text(batch_result: Dictionary, build_entries: Dictionary = {}, exported_at_iso_utc: String = "") -> String:
+	var total_runs: int = int(batch_result.get("total_runs", 0))
+	var attacker_id: String = str(batch_result.get("inputs", {}).get("attacker_build_id", ""))
+	var defender_id: String = str(batch_result.get("inputs", {}).get("defender_build_id", ""))
+	var attacker_name: String = _build_display_label(build_entries, attacker_id)
+	var defender_name: String = _build_display_label(build_entries, defender_id)
+	var attacker_wins: int = int(batch_result.get("wins", {}).get("attacker", 0))
+	var defender_wins: int = int(batch_result.get("wins", {}).get("defender", 0))
+	var attacker_win_rate: float = float(batch_result.get("win_rates", {}).get("attacker_pct", 0.0))
+	var defender_win_rate: float = float(batch_result.get("win_rates", {}).get("defender_pct", 0.0))
+	var avg_turns: float = float(batch_result.get("turn_stats", {}).get("average", 0.0))
+	var lines: Array[String] = []
+	lines.append("GLADIUS Batch Report")
+	lines.append("Export UTC: %s" % exported_at_iso_utc)
+	lines.append("Inputs:")
+	lines.append("- A: %s (%s)" % [attacker_name, attacker_id])
+	lines.append("- B: %s (%s)" % [defender_name, defender_id])
+	lines.append("- Start Seed: %d" % int(batch_result.get("inputs", {}).get("start_seed", 0)))
+	lines.append("- Simulations: %d" % total_runs)
+	lines.append("- Max Turns/Fight: %d" % int(batch_result.get("inputs", {}).get("max_turns", 0)))
+	lines.append("")
+	lines.append("Summary:")
+	lines.append("- A wins: %d (%.2f%%)" % [attacker_wins, attacker_win_rate])
+	lines.append("- B wins: %d (%.2f%%)" % [defender_wins, defender_win_rate])
+	lines.append("- Draws/Unresolved: %d" % int(batch_result.get("wins", {}).get("draws_or_unresolved", 0)))
+	lines.append("- Turns avg/min/max: %.2f / %d / %d" % [
+		avg_turns,
+		int(batch_result.get("turn_stats", {}).get("min", 0)),
+		int(batch_result.get("turn_stats", {}).get("max", 0)),
+	])
+	lines.append("")
+	lines.append("Terminal Conditions:")
+	lines.append_array(_sorted_count_lines(batch_result.get("terminal_condition_counts", {})))
+	lines.append("")
+	lines.append("Ability Usage (all fights):")
+	lines.append_array(_sorted_count_lines(batch_result.get("action_usage_counts", {})))
+	lines.append("")
+	lines.append("Status Applications (all fights):")
+	lines.append_array(_sorted_count_lines(batch_result.get("status_application_counts", {})))
+	lines.append("")
+	lines.append("Per-Fighter Diagnostics:")
+	lines.append_array(_fighter_diagnostics_lines(batch_result.get("fighters", {}).get("attacker", {}), "A", attacker_name))
+	lines.append("")
+	lines.append_array(_fighter_diagnostics_lines(batch_result.get("fighters", {}).get("defender", {}), "B", defender_name))
+	return "\n".join(lines)
+
+func save_batch_report(batch_result: Dictionary, build_entries: Dictionary = {}) -> Dictionary:
+	var exported_at_iso_utc: String = Time.get_datetime_string_from_system(true, true)
+	var report_dir_abs: String = ProjectSettings.globalize_path(REPORTS_DIR)
+	var created_ok: bool = DirAccess.make_dir_recursive_absolute(report_dir_abs) == OK
+	if not created_ok:
+		return {
+			"ok": false,
+			"error": "Failed to create report directory: %s" % REPORTS_DIR,
+			"report_dir": REPORTS_DIR,
+		}
+	var base_name: String = _unique_report_base_name(batch_result)
+	var json_path: String = "%s/%s.json" % [REPORTS_DIR, base_name]
+	var txt_path: String = "%s/%s.txt" % [REPORTS_DIR, base_name]
+	var report_dict: Dictionary = batch_result_to_report_dict(batch_result, build_entries, exported_at_iso_utc)
+	var json_text: String = JSON.stringify(report_dict, "\t", true)
+	var text_report: String = format_batch_result_text(batch_result, build_entries, exported_at_iso_utc)
+	var json_ok: bool = _write_text_file(json_path, json_text)
+	var txt_ok: bool = _write_text_file(txt_path, text_report)
+	if not (json_ok and txt_ok):
+		return {
+			"ok": false,
+			"error": "Failed to write one or more report files.",
+			"json_path": json_path,
+			"txt_path": txt_path,
+		}
+	return {
+		"ok": true,
+		"report_dir": REPORTS_DIR,
+		"json_path": json_path,
+		"txt_path": txt_path,
+		"base_name": base_name,
+	}
+
+func save_standard_suite_reports(start_seed: int, simulation_count: int, max_turns: int, build_entries: Dictionary = {}) -> Dictionary:
+	var suite: Array[Dictionary] = [
+		{"label": "SEC_vs_SEC", "a": "SEC_STARTER", "b": "SEC_STARTER"},
+		{"label": "RET_vs_RET", "a": "RET_STARTER", "b": "RET_STARTER"},
+		{"label": "SEC_vs_RET", "a": "SEC_STARTER", "b": "RET_STARTER"},
+		{"label": "RET_vs_SEC", "a": "RET_STARTER", "b": "SEC_STARTER"},
+	]
+	var saved_reports: Array[Dictionary] = []
+	for matchup in suite:
+		var result: Dictionary = run_batch(
+			str(matchup.get("a", "")),
+			str(matchup.get("b", "")),
+			start_seed,
+			simulation_count,
+			max_turns
+		)
+		var save_outcome: Dictionary = save_batch_report(result, build_entries)
+		if not bool(save_outcome.get("ok", false)):
+			return {
+				"ok": false,
+				"error": str(save_outcome.get("error", "Unknown save failure")),
+				"saved_reports": saved_reports,
+			}
+		save_outcome["label"] = str(matchup.get("label", ""))
+		saved_reports.append(save_outcome)
+		start_seed += simulation_count
+	var summary_save: Dictionary = _save_suite_summary(saved_reports, simulation_count, max_turns)
+	if not bool(summary_save.get("ok", false)):
+		return {
+			"ok": false,
+			"error": str(summary_save.get("error", "Failed to save suite summary")),
+			"saved_reports": saved_reports,
+		}
+	return {
+		"ok": true,
+		"saved_reports": saved_reports,
+		"summary_path": str(summary_save.get("summary_path", "")),
+	}
+
+func _save_suite_summary(saved_reports: Array[Dictionary], simulation_count: int, max_turns: int) -> Dictionary:
+	var summary_lines: Array[String] = []
+	var exported_at_iso_utc: String = Time.get_datetime_string_from_system(true, true)
+	summary_lines.append("GLADIUS Standard Suite Report")
+	summary_lines.append("Export UTC: %s" % exported_at_iso_utc)
+	summary_lines.append("Runs per matchup: %d | Max Turns: %d" % [simulation_count, max_turns])
+	summary_lines.append("")
+	for saved in saved_reports:
+		summary_lines.append("- %s" % str(saved.get("label", "")))
+		summary_lines.append("  JSON: %s" % str(saved.get("json_path", "")))
+		summary_lines.append("  TXT : %s" % str(saved.get("txt_path", "")))
+	var base_name: String = "suite_%s_runs%d_max%d" % [_timestamp_for_filename(), simulation_count, max_turns]
+	var summary_path: String = "%s/%s.txt" % [REPORTS_DIR, base_name]
+	if not _write_text_file(summary_path, "\n".join(summary_lines)):
+		return {"ok": false, "error": "Could not write summary file", "summary_path": summary_path}
+	return {"ok": true, "summary_path": summary_path}
+
+func _unique_report_base_name(batch_result: Dictionary) -> String:
+	var inputs: Dictionary = batch_result.get("inputs", {})
+	var attacker_id: String = _sanitize_filename_token(str(inputs.get("attacker_build_id", "ATTACKER")))
+	var defender_id: String = _sanitize_filename_token(str(inputs.get("defender_build_id", "DEFENDER")))
+	var start_seed: int = int(inputs.get("start_seed", 0))
+	var run_count: int = int(batch_result.get("total_runs", 0))
+	var base_name: String = "%s_%s_vs_%s_seed%d_runs%d" % [
+		_timestamp_for_filename(),
+		attacker_id,
+		defender_id,
+		start_seed,
+		run_count,
+	]
+	var candidate: String = base_name
+	var suffix: int = 1
+	while FileAccess.file_exists("%s/%s.json" % [REPORTS_DIR, candidate]) or FileAccess.file_exists("%s/%s.txt" % [REPORTS_DIR, candidate]):
+		candidate = "%s_%02d" % [base_name, suffix]
+		suffix += 1
+	return candidate
+
+func _timestamp_for_filename() -> String:
+	var dt: Dictionary = Time.get_datetime_dict_from_system()
+	return "%04d-%02d-%02d_%02d%02d%02d" % [
+		int(dt.get("year", 1970)),
+		int(dt.get("month", 1)),
+		int(dt.get("day", 1)),
+		int(dt.get("hour", 0)),
+		int(dt.get("minute", 0)),
+		int(dt.get("second", 0)),
+	]
+
+func _sanitize_filename_token(value: String) -> String:
+	var token: String = value.strip_edges().to_upper()
+	if token == "":
+		return "UNKNOWN"
+	var sanitized: String = ""
+	for i in range(token.length()):
+		var ch: String = token.substr(i, 1)
+		var is_letter: bool = ch >= "A" and ch <= "Z"
+		var is_number: bool = ch >= "0" and ch <= "9"
+		if is_letter or is_number:
+			sanitized += ch
+		else:
+			sanitized += "_"
+	return sanitized
+
+func _write_text_file(path: String, contents: String) -> bool:
+	var file: FileAccess = FileAccess.open(path, FileAccess.WRITE)
+	if file == null:
+		return false
+	file.store_string(contents)
+	file.flush()
+	return true
+
+func _build_display_label(build_entries: Dictionary, build_id: String) -> String:
+	var entry: Dictionary = build_entries.get(build_id, {})
+	return str(entry.get("display_name", build_id))
+
+func _sorted_count_lines(counts_variant: Variant) -> Array[String]:
+	if typeof(counts_variant) != TYPE_DICTIONARY:
+		return ["- (none)"]
+	var counts: Dictionary = counts_variant
+	if counts.is_empty():
+		return ["- (none)"]
+	var keys: Array[String] = []
+	for key_variant in counts.keys():
+		keys.append(str(key_variant))
+	keys.sort()
+	var lines: Array[String] = []
+	for key in keys:
+		lines.append("- %s: %d" % [key, int(counts.get(key, 0))])
+	return lines
+
+func _fighter_diagnostics_lines(metrics: Dictionary, side_id: String, display_name: String) -> Array[String]:
+	if metrics.is_empty():
+		return ["%s (%s): no data." % [side_id, display_name]]
+	var per_match: Dictionary = metrics.get("per_match", {})
+	var lines: Array[String] = []
+	lines.append("%s (%s):" % [side_id, display_name])
+	lines.append("- Build ID: %s" % str(metrics.get("build_id", "")))
+	lines.append("- W/L: %d / %d" % [int(metrics.get("wins", 0)), int(metrics.get("losses", 0))])
+	lines.append("- Avg damage dealt/taken: %.2f / %.2f" % [
+		float(per_match.get("avg_damage_dealt", 0.0)),
+		float(per_match.get("avg_damage_taken", 0.0)),
+	])
+	lines.append("- Avg stamina spent: %.2f" % float(per_match.get("avg_sta_spent", 0.0)))
+	lines.append("- Hit/Miss: %d / %d" % [int(metrics.get("hit_count", 0)), int(metrics.get("miss_count", 0))])
+	lines.append("- Avg turns survived: %.2f" % float(per_match.get("avg_turns_survived", 0.0)))
+	lines.append("- Avg low/zero STA turns: %.2f / %.2f" % [
+		float(per_match.get("avg_low_sta_turns", 0.0)),
+		float(per_match.get("avg_zero_sta_turns", 0.0)),
+	])
+	var outcome: Dictionary = metrics.get("outcome_end_state_averages", {})
+	var win_end: Dictionary = outcome.get("wins", {})
+	var loss_end: Dictionary = outcome.get("losses", {})
+	lines.append("- End state in wins (HP/STA): %.2f / %.2f" % [
+		float(win_end.get("remaining_hp", 0.0)),
+		float(win_end.get("remaining_sta", 0.0)),
+	])
+	lines.append("- End state in losses (HP/STA): %.2f / %.2f" % [
+		float(loss_end.get("remaining_hp", 0.0)),
+		float(loss_end.get("remaining_sta", 0.0)),
+	])
+	lines.append("- Ability usage:")
+	lines.append_array(_sorted_count_lines(metrics.get("ability_usage_counts", {})))
+	lines.append("- Status applications:")
+	lines.append_array(_sorted_count_lines(metrics.get("status_application_counts", {})))
+	lines.append("- Status uptime turns:")
+	lines.append_array(_sorted_count_lines(metrics.get("status_uptime_turns", {})))
+	return lines

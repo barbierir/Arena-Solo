@@ -139,10 +139,30 @@ unique_name_in_owner = true
 layout_mode = 2
 text = "Run Batch"
 
+[node name="SaveBatchButton" type="Button" parent="OuterMargin/Panel/Margin/RootVBox/BatchPanel/BatchMargin/BatchVBox/BatchControlsRow"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Save Batch Report"
+
+[node name="RunStandardSuiteButton" type="Button" parent="OuterMargin/Panel/Margin/RootVBox/BatchPanel/BatchMargin/BatchVBox/BatchControlsRow"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Run Standard Suite + Save"
+
 [node name="BatchSummaryLabel" type="Label" parent="OuterMargin/Panel/Margin/RootVBox/BatchPanel/BatchMargin/BatchVBox"]
 unique_name_in_owner = true
 layout_mode = 2
 text = "Run batch to see summary."
+
+[node name="BatchExportStatusLabel" type="Label" parent="OuterMargin/Panel/Margin/RootVBox/BatchPanel/BatchMargin/BatchVBox"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Export Status: (none)"
+
+[node name="BatchLastSavedPathLabel" type="Label" parent="OuterMargin/Panel/Margin/RootVBox/BatchPanel/BatchMargin/BatchVBox"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Last Saved: (none)"
 
 [node name="BatchResultsLabel" type="RichTextLabel" parent="OuterMargin/Panel/Margin/RootVBox/BatchPanel/BatchMargin/BatchVBox"]
 unique_name_in_owner = true
