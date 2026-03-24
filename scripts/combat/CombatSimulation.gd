@@ -45,9 +45,9 @@ func simulate_to_completion(max_turns: int = 64) -> CombatRuntimeState:
 	return runtime_state
 
 func _make_combatant_state(build_id: String, combatant_id: String) -> CombatantRuntimeState:
-	var state := COMBATANT_RUNTIME_STATE_SCRIPT.new()
+	var state: CombatantRuntimeState = COMBATANT_RUNTIME_STATE_SCRIPT.new()
 	var build: Dictionary = content_registry.builds.get("entries", {}).get(build_id, {})
-	var stats := build_stats_resolver.resolve_build_stats(build_id)
+	var stats: Dictionary = build_stats_resolver.resolve_build_stats(build_id)
 	state.combatant_id = combatant_id
 	state.build_id = build_id
 	state.class_id = str(build.get("class_id", ""))

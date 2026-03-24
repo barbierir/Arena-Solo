@@ -10,7 +10,7 @@ func resolve_build_stats(build_id: String) -> Dictionary:
 	var build: Dictionary = _content_registry.builds.get("entries", {}).get(build_id, {})
 	var class_def: Dictionary = _content_registry.classes.get("entries", {}).get(build.get("class_id", ""), {})
 
-	var stats := {
+	var stats: Dictionary = {
 		"max_hp": int(class_def.get("base_hp", 0)) + int(build.get("bonus_hp", 0)),
 		"max_sta": int(class_def.get("base_sta", 0)) + int(build.get("bonus_sta", 0)),
 		"atk": int(class_def.get("base_atk", 0)) + int(build.get("bonus_atk", 0)),
