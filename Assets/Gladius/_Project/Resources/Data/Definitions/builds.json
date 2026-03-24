@@ -1,0 +1,34 @@
+{
+  "builds": [
+    {
+      "id": "RET_STARTER",
+      "displayName": "Retiarius Starter",
+      "classId": "RETIARIUS",
+      "weaponItemId": "TRIDENT_START",
+      "offhandItemId": "NET_START",
+      "armorItemId": "LIGHT_ARMOR",
+      "accessoryItemId": "",
+      "bonusHp": 0,
+      "bonusSta": 0,
+      "bonusAtk": 0,
+      "bonusDef": 0,
+      "bonusSpd": 0,
+      "bonusSkl": 0
+    },
+    {
+      "id": "SEC_STARTER",
+      "displayName": "Secutor Starter",
+      "classId": "SECUTOR",
+      "weaponItemId": "GLADIUS_START",
+      "offhandItemId": "TOWER_SHIELD_START",
+      "armorItemId": "HEAVY_HELM",
+      "accessoryItemId": "",
+      "bonusHp": 0,
+      "bonusSta": 0,
+      "bonusAtk": 0,
+      "bonusDef": 0,
+      "bonusSpd": 0,
+      "bonusSkl": 0
+    }
+  ]
+}

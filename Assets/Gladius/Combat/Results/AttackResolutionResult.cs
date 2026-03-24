@@ -9,7 +9,10 @@ namespace Gladius.Combat.Results
             HitChanceResult hitChance,
             DamageResult damage,
             int targetHpBefore,
-            int targetHpAfter)
+            int targetHpAfter,
+            string skillId,
+            bool isCritical,
+            string appliedStatusId)
         {
             Type = type;
             StaminaCost = staminaCost;
@@ -18,6 +21,9 @@ namespace Gladius.Combat.Results
             Damage = damage;
             TargetHpBefore = targetHpBefore;
             TargetHpAfter = targetHpAfter;
+            SkillId = skillId;
+            IsCritical = isCritical;
+            AppliedStatusId = appliedStatusId;
         }
 
         public AttackResolutionType Type { get; }
@@ -27,6 +33,9 @@ namespace Gladius.Combat.Results
         public DamageResult Damage { get; }
         public int TargetHpBefore { get; }
         public int TargetHpAfter { get; }
+        public string SkillId { get; }
+        public bool IsCritical { get; }
+        public string AppliedStatusId { get; }
 
         public static AttackResolutionResult StaminaBlocked =>
             new(
@@ -36,7 +45,10 @@ namespace Gladius.Combat.Results
                 default,
                 default,
                 0,
-                0);
+                0,
+                string.Empty,
+                false,
+                string.Empty);
     }
 
     public enum AttackResolutionType

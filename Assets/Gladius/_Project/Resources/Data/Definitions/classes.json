@@ -1,0 +1,30 @@
+{
+  "classes": [
+    {
+      "id": "RETIARIUS",
+      "displayName": "Retiarius",
+      "role": "Disruptor",
+      "baseHp": 22,
+      "baseSta": 10,
+      "baseAtk": 6,
+      "baseDef": 3,
+      "baseSpd": 8,
+      "baseSkl": 7,
+      "passiveNotes": "Net specialist.",
+      "allowedSkillIds": ["BASIC_ATTACK", "DEFEND", "RECOVER", "NET_THROW"]
+    },
+    {
+      "id": "SECUTOR",
+      "displayName": "Secutor",
+      "role": "Bulwark",
+      "baseHp": 26,
+      "baseSta": 9,
+      "baseAtk": 7,
+      "baseDef": 7,
+      "baseSpd": 5,
+      "baseSkl": 5,
+      "passiveNotes": "High DEF and shield access.",
+      "allowedSkillIds": ["BASIC_ATTACK", "DEFEND", "RECOVER", "SHIELD_BASH"]
+    }
+  ]
+}

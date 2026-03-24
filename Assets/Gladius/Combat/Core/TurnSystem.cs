@@ -7,10 +7,18 @@ namespace Gladius.Combat.Core
         public GladiatorRuntimeState CurrentActor { get; private set; }
         public GladiatorRuntimeState CurrentTarget { get; private set; }
 
-        public void Initialize(GladiatorRuntimeState first, GladiatorRuntimeState second)
+        public void Initialize(GladiatorRuntimeState player, GladiatorRuntimeState enemy)
         {
-            CurrentActor = first;
-            CurrentTarget = second;
+            if (player.Spd >= enemy.Spd)
+            {
+                CurrentActor = player;
+                CurrentTarget = enemy;
+            }
+            else
+            {
+                CurrentActor = enemy;
+                CurrentTarget = player;
+            }
         }
 
         public void AdvanceTurn()

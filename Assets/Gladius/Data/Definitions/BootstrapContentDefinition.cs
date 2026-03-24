@@ -6,9 +6,12 @@ namespace Gladius.Data.Definitions
     public sealed class BootstrapContentDefinition
     {
         public CombatControlsDefinition controls;
-        public GladiatorDefinition[] gladiators;
+        public ClassDefinition[] classes;
+        public BuildDefinition[] builds;
         public EquipmentDefinition[] equipment;
         public SkillDefinition[] skills;
         public StatusEffectDefinition[] statusEffects;
+        public AIProfileDefinition[] aiProfiles;
+        public EncounterDefinition[] encounters;
     }
 }
