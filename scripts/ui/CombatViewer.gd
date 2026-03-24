@@ -27,14 +27,27 @@ var status_defs: Dictionary = {}
 @onready var batch_count_input: LineEdit = %BatchCountInput
 @onready var batch_max_turns_input: LineEdit = %BatchMaxTurnsInput
 @onready var run_batch_button: Button = %RunBatchButton
+@onready var save_batch_button: Button = %SaveBatchButton
+@onready var run_standard_suite_button: Button = %RunStandardSuiteButton
 @onready var batch_summary_label: Label = %BatchSummaryLabel
+@onready var batch_export_status_label: Label = %BatchExportStatusLabel
+@onready var batch_last_saved_path_label: Label = %BatchLastSavedPathLabel
 @onready var batch_results_label: RichTextLabel = %BatchResultsLabel
 
-func connect_actions(on_run: Callable, on_step_turn: Callable, on_replay: Callable, on_run_batch: Callable) -> void:
+func connect_actions(
+	on_run: Callable,
+	on_step_turn: Callable,
+	on_replay: Callable,
+	on_run_batch: Callable,
+	on_save_batch: Callable,
+	on_run_suite: Callable
+) -> void:
 	run_fight_button.pressed.connect(on_run)
 	step_turn_button.pressed.connect(on_step_turn)
 	replay_button.pressed.connect(on_replay)
 	run_batch_button.pressed.connect(on_run_batch)
+	save_batch_button.pressed.connect(on_save_batch)
+	run_standard_suite_button.pressed.connect(on_run_suite)
 
 func seed_value() -> int:
 	return int(seed_input.text)
@@ -164,6 +177,19 @@ func render_batch_results(batch_result: Dictionary, build_entries: Dictionary) -
 	lines.append("")
 	lines.append_array(_fighter_diagnostics_lines(batch_result.get("fighters", {}).get("defender", {}), "B", defender_name))
 	batch_results_label.text = "\n".join(lines)
+
+func set_batch_export_status(message: String, success: bool) -> void:
+	if success:
+		batch_export_status_label.modulate = Color(0.6, 0.95, 0.6)
+	else:
+		batch_export_status_label.modulate = Color(1.0, 0.65, 0.65)
+	batch_export_status_label.text = "Export Status: %s" % message
+
+func set_last_saved_path(path: String) -> void:
+	if path == "":
+		batch_last_saved_path_label.text = "Last Saved: (none)"
+		return
+	batch_last_saved_path_label.text = "Last Saved: %s" % path
 
 func _selected_build_id(selector: OptionButton) -> String:
 	var selected_index: int = selector.selected

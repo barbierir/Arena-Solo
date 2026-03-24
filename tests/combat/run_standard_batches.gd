@@ -11,6 +11,7 @@ func _initialize() -> void:
 	var registry: ContentRegistry = loader.load_all_definitions()
 	var simulator: CombatBatchSimulator = COMBAT_BATCH_SIMULATOR_SCRIPT.new()
 	simulator.configure(registry)
+	var build_entries: Dictionary = registry.builds.get("entries", {})
 
 	var scenarios: Array[Dictionary] = [
 		{"label": "SEC vs SEC", "a": "SEC_STARTER", "b": "SEC_STARTER", "seed": 6100},
@@ -28,6 +29,17 @@ func _initialize() -> void:
 			MAX_TURNS
 		)
 		_print_scenario(str(scenario.get("label", "")), result)
+		var save_outcome: Dictionary = simulator.save_batch_report(result, build_entries)
+		if bool(save_outcome.get("ok", false)):
+			print("Saved report: %s | %s" % [str(save_outcome.get("json_path", "")), str(save_outcome.get("txt_path", ""))])
+		else:
+			print("Failed to save report for %s: %s" % [str(scenario.get("label", "")), str(save_outcome.get("error", ""))])
+
+	var suite_outcome: Dictionary = simulator.save_standard_suite_reports(6100, RUN_COUNT, MAX_TURNS, build_entries)
+	if bool(suite_outcome.get("ok", false)):
+		print("Suite summary saved: %s" % str(suite_outcome.get("summary_path", "")))
+	else:
+		print("Suite summary save failed: %s" % str(suite_outcome.get("error", "")))
 
 	quit(0)
 

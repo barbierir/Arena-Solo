@@ -32,6 +32,12 @@ The combat viewer now includes a **Batch Balance Harness** panel that runs many 
    - `Runs` (number of simulations)
    - `Max Turns` safeguard per fight
 3. Click **Run Batch**.
+4. Click **Save Batch Report** to export the latest batch report.
+5. Optional: click **Run Standard Suite + Save** to run and export:
+   - `SEC_STARTER` vs `SEC_STARTER`
+   - `RET_STARTER` vs `RET_STARTER`
+   - `SEC_STARTER` vs `RET_STARTER`
+   - `RET_STARTER` vs `SEC_STARTER`
 
 ### Batch metrics reported
 
@@ -52,6 +58,19 @@ The combat viewer now includes a **Batch Balance Harness** panel that runs many 
   - per-fighter ability usage
   - per-fighter status applications and uptime turns
   - remaining HP/STA split by wins vs losses
+
+### Batch report export files
+
+- Reports are saved under `user://batch_reports/`.
+- Each manual save writes both:
+  - JSON report (`.json`)
+  - readable text report (`.txt`)
+- File names are timestamped and matchup-aware, for example:
+  - `2026-03-24_184210_SEC_STARTER_vs_RET_STARTER_seed1000_runs1000.json`
+  - `2026-03-24_184210_SEC_STARTER_vs_RET_STARTER_seed1000_runs1000.txt`
+- If the same file name would collide, a numeric suffix is added.
+- The debug UI shows an export status line and last-saved path.
+- If no batch has been run yet, **Save Batch Report** fails gracefully with a clear message.
 
 ### Determinism and safeguards
 
@@ -112,3 +131,5 @@ To run the standard 1000-run matchup set for tuning (if Godot CLI is available):
 ```bash
 godot4 --headless --script res://tests/combat/run_standard_batches.gd
 ```
+
+This headless helper now also saves JSON/TXT reports for each matchup plus a suite summary text file under `user://batch_reports/`.
