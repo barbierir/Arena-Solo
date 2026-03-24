@@ -1,12 +1,14 @@
 {
   "entries": {
-    "ENC_RET_VS_SEC_STARTER": {
-      "id": "ENC_RET_VS_SEC_STARTER",
+    "STARTER_DUEL_RET_VS_SEC": {
+      "id": "STARTER_DUEL_RET_VS_SEC",
       "display_name": "Starter Duel",
-      "attacker_build_id": "RET_STARTER",
-      "defender_build_id": "SEC_STARTER",
-      "seed": 1001,
-      "notes": "Vertical slice foundation duel."
+      "mode": "Duel",
+      "player_build_id": "RET_STARTER",
+      "enemy_build_id": "SEC_STARTER",
+      "enemy_ai_profile_id": "STARTER_DUEL_AI",
+      "reward_gold": 100,
+      "reward_xp": 50
     }
   }
 }

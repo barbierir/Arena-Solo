@@ -1,9 +1,52 @@
 {
   "entries": {
+    "BASIC_ATTACK": {
+      "id": "BASIC_ATTACK",
+      "display_name": "Basic Attack",
+      "usable_by": "ANY",
+      "target_type": "Enemy",
+      "sta_cost": 2,
+      "accuracy_mod_pct": 0.0,
+      "flat_damage": 0,
+      "crit_bonus_pct": 0.0,
+      "self_def_mod": 0,
+      "apply_status_id": "",
+      "status_turns": 0,
+      "cooldown_turns": 0
+    },
+    "DEFEND": {
+      "id": "DEFEND",
+      "display_name": "Defend",
+      "usable_by": "ANY",
+      "target_type": "Self",
+      "sta_cost": 1,
+      "accuracy_mod_pct": 0.0,
+      "flat_damage": 0,
+      "crit_bonus_pct": 0.0,
+      "self_def_mod": 2,
+      "apply_status_id": "",
+      "status_turns": 0,
+      "cooldown_turns": 0
+    },
+    "RECOVER": {
+      "id": "RECOVER",
+      "display_name": "Recover",
+      "usable_by": "ANY",
+      "target_type": "Self",
+      "sta_cost": 0,
+      "accuracy_mod_pct": 0.0,
+      "flat_damage": 0,
+      "crit_bonus_pct": 0.0,
+      "self_def_mod": 0,
+      "apply_status_id": "",
+      "status_turns": 0,
+      "cooldown_turns": 0
+    },
     "NET_THROW": {
       "id": "NET_THROW",
       "display_name": "Net Throw",
-      "usable_by": ["RETIARIUS"],
+      "usable_by": "RETIARIUS",
+      "target_type": "Enemy",
       "sta_cost": 3,
       "accuracy_mod_pct": 0.0,
       "flat_damage": 0,
@@ -16,7 +59,8 @@
     "SHIELD_BASH": {
       "id": "SHIELD_BASH",
       "display_name": "Shield Bash",
-      "usable_by": ["SECUTOR"],
+      "usable_by": "SECUTOR",
+      "target_type": "Enemy",
       "sta_cost": 2,
       "accuracy_mod_pct": 0.0,
       "flat_damage": -1,

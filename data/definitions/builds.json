@@ -4,19 +4,31 @@
       "id": "RET_STARTER",
       "display_name": "Retiarius Starter",
       "class_id": "RETIARIUS",
-      "weapon_id": "TRIDENT_START",
-      "offhand_id": "NET_START",
-      "skill_ids": ["BASIC_ATTACK", "DEFEND", "RECOVER", "NET_THROW"],
-      "ai_profile_id": "AI_RET_STARTER"
+      "weapon_item_id": "TRIDENT_START",
+      "offhand_item_id": "NET_START",
+      "armor_item_id": "LIGHT_ARMOR",
+      "accessory_item_id": "",
+      "bonus_hp": 0,
+      "bonus_sta": 0,
+      "bonus_atk": 0,
+      "bonus_def": 0,
+      "bonus_spd": 0,
+      "bonus_skl": 0
     },
     "SEC_STARTER": {
       "id": "SEC_STARTER",
       "display_name": "Secutor Starter",
       "class_id": "SECUTOR",
-      "weapon_id": "GLADIUS_START",
-      "offhand_id": "TOWER_SHIELD_START",
-      "skill_ids": ["BASIC_ATTACK", "DEFEND", "RECOVER", "SHIELD_BASH"],
-      "ai_profile_id": "AI_SEC_STARTER"
+      "weapon_item_id": "GLADIUS_START",
+      "offhand_item_id": "TOWER_SHIELD_START",
+      "armor_item_id": "HEAVY_HELM",
+      "accessory_item_id": "",
+      "bonus_hp": 0,
+      "bonus_sta": 0,
+      "bonus_atk": 0,
+      "bonus_def": 0,
+      "bonus_spd": 0,
+      "bonus_skl": 0
     }
   }
 }
