@@ -55,6 +55,14 @@ Out of scope:
 
 ---
 
+## Priority
+
+This file overrides all other instructions in the repository.
+
+Always read this file before making any changes.
+
+---
+
 ## Core Principles
 
 ### 1. Data-Driven Design (CRITICAL)
