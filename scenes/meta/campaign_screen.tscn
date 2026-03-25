@@ -38,8 +38,9 @@ theme_override_constants/margin_top = 8
 theme_override_constants/margin_right = 10
 theme_override_constants/margin_bottom = 8
 
-[node name="Header" type="HBoxContainer" parent="Margin/RootVBox/ResourcePanel/ResourceMargin"]
+[node name="Header" type="HFlowContainer" parent="Margin/RootVBox/ResourcePanel/ResourceMargin"]
 layout_mode = 2
+size_flags_horizontal = 3
 theme_override_constants/separation = 10
 
 [node name="GoldLabel" type="Label" parent="Margin/RootVBox/ResourcePanel/ResourceMargin/Header"]
@@ -88,8 +89,10 @@ theme_override_constants/margin_top = 8
 theme_override_constants/margin_right = 10
 theme_override_constants/margin_bottom = 8
 
-[node name="Buttons" type="HBoxContainer" parent="Margin/RootVBox/ActionsPanel/ActionsMargin"]
+[node name="Buttons" type="GridContainer" parent="Margin/RootVBox/ActionsPanel/ActionsMargin"]
 layout_mode = 2
+size_flags_horizontal = 3
+columns = 4
 theme_override_constants/separation = 8
 
 [node name="NewGameButton" type="Button" parent="Margin/RootVBox/ActionsPanel/ActionsMargin/Buttons"]
@@ -172,6 +175,7 @@ text = "None"
 unique_name_in_owner = true
 custom_minimum_size = Vector2(0, 280)
 layout_mode = 2
+size_flags_horizontal = 3
 size_flags_vertical = 3
 
 [node name="SidePanel" type="VBoxContainer" parent="Margin/RootVBox/ContentRow"]
@@ -249,9 +253,10 @@ text = "Last Fight Result"
 unique_name_in_owner = true
 custom_minimum_size = Vector2(0, 80)
 layout_mode = 2
+size_flags_horizontal = 3
 bbcode_enabled = false
-scroll_active = false
-fit_content = true
+scroll_active = true
+fit_content = false
 text = "Nessun combattimento ancora risolto."
 
 [node name="EventPanel" type="PanelContainer" parent="Margin/RootVBox/ContentRow/SidePanel"]
@@ -277,6 +282,7 @@ text = "Recent Events"
 unique_name_in_owner = true
 custom_minimum_size = Vector2(0, 220)
 layout_mode = 2
+size_flags_horizontal = 3
 size_flags_vertical = 3
 bbcode_enabled = false
 scroll_following = true
