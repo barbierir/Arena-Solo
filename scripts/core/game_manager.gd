@@ -7,6 +7,7 @@ signal fight_started(payload: Dictionary)
 signal fight_resolved(result: Dictionary)
 signal save_completed(success: bool)
 signal recent_events_updated(events: Array[String])
+signal daily_event_updated(event_data: Dictionary)
 
 const SAVE_PATH: String = "user://savegame.json"
 
@@ -29,12 +30,27 @@ const REWARD_FAME_PER_WIN: int = 5
 const REWARD_EXP_WINNER: int = 10
 const REWARD_EXP_SURVIVOR_LOSER: int = 3
 const LOSS_DEATH_CHANCE: float = 0.20
+const LOSS_DEATH_CHANCE_MAX: float = 0.75
 
 const INJURY_DAYS_STANDARD_LOSS: int = 2
 const INJURY_DAYS_SEVERE_LOSS: int = 3
 
 const LEVEL_CAP: int = 5
 const RECENT_EVENTS_MAX: int = 10
+const EVENT_TYPE_FIGHT: String = "FIGHT"
+const EVENT_TYPE_HARD_FIGHT: String = "HARD_FIGHT"
+const EVENT_TYPE_REST: String = "REST"
+
+const EVENT_FIGHT_WEIGHT: float = 0.60
+const EVENT_HARD_FIGHT_WEIGHT: float = 0.25
+const EVENT_REST_WEIGHT: float = 0.15
+
+const EVENT_FIGHT_REWARD_MULTIPLIER: float = 1.0
+const EVENT_FIGHT_RISK_MODIFIER: float = 1.0
+const EVENT_HARD_FIGHT_REWARD_MULTIPLIER: float = 1.5
+const EVENT_HARD_FIGHT_RISK_MODIFIER: float = 1.5
+const EVENT_REST_REWARD_MULTIPLIER: float = 0.0
+const EVENT_REST_RISK_MODIFIER: float = 0.0
 
 const STATUS_AVAILABLE: String = "AVAILABLE"
 const STATUS_INJURED: String = "INJURED"
@@ -56,6 +72,7 @@ var battle_history: Array[Dictionary] = []
 var recent_events: Array[String] = []
 var game_state: String = STATE_IDLE
 var selected_gladiator_id: String = ""
+var current_event: Dictionary = {}
 
 var _content_registry: ContentRegistry
 var _stats_resolver: BuildStatsResolver
@@ -73,6 +90,7 @@ func new_game() -> void:
 	roster.clear()
 	battle_history.clear()
 	recent_events.clear()
+	current_event = generate_daily_event()
 	_set_game_state(STATE_IDLE)
 	recruit_gladiator("RET")
 	recruit_gladiator("SEC")
@@ -82,6 +100,7 @@ func new_game() -> void:
 	roster_updated.emit()
 	_emit_resources_updated()
 	_emit_recent_events_updated()
+	_emit_daily_event_updated()
 
 func load_game() -> bool:
 	if not FileAccess.file_exists(SAVE_PATH):
@@ -109,6 +128,7 @@ func load_game() -> bool:
 	roster_updated.emit()
 	_emit_resources_updated()
 	_emit_recent_events_updated()
+	_emit_daily_event_updated()
 	return true
 
 func save_game() -> bool:
@@ -123,6 +143,7 @@ func save_game() -> bool:
 		"roster": roster,
 		"battle_history": battle_history,
 		"recent_events": recent_events,
+		"current_event": current_event,
 	}
 	var serialized: String = JSON.stringify(payload, "\t", false)
 	var file: FileAccess = FileAccess.open(SAVE_PATH, FileAccess.WRITE)
@@ -137,12 +158,16 @@ func save_game() -> bool:
 
 func advance_day() -> void:
 	day += 1
+	current_event = generate_daily_event()
 	heal_and_update_injuries()
+	if _is_rest_event(current_event):
+		apply_rest_day_recovery_bonus()
 	apply_daily_upkeep()
 	save_game()
 	roster_updated.emit()
 	_emit_resources_updated()
 	_emit_recent_events_updated()
+	_emit_daily_event_updated()
 
 func get_roster() -> Array[Dictionary]:
 	return roster.duplicate(true)
@@ -215,9 +240,38 @@ func recruit_gladiator(gladiator_class: String) -> Dictionary:
 	return gladiator.duplicate(true)
 
 func can_start_fight() -> bool:
+	if _is_rest_event(get_current_event()):
+		return false
 	return get_available_gladiators().size() >= 1
 
+func generate_daily_event() -> Dictionary:
+	var rng: RandomNumberGenerator = RandomNumberGenerator.new()
+	rng.seed = int(hash("daily-event-%d-%d-%d" % [day, next_enemy_index, roster.size()]))
+	var roll: float = rng.randf()
+	var selected_event: Dictionary = _build_fight_event()
+	if roll < EVENT_FIGHT_WEIGHT:
+		selected_event = _build_fight_event()
+	elif roll < EVENT_FIGHT_WEIGHT + EVENT_HARD_FIGHT_WEIGHT:
+		selected_event = _build_hard_fight_event()
+	elif roll < EVENT_FIGHT_WEIGHT + EVENT_HARD_FIGHT_WEIGHT + EVENT_REST_WEIGHT:
+		selected_event = _build_rest_event()
+	else:
+		selected_event = _build_fight_event()
+	if _event_type(selected_event) == EVENT_TYPE_HARD_FIGHT:
+		add_recent_event("A dangerous arena day increased the stakes.")
+	elif _event_type(selected_event) == EVENT_TYPE_REST:
+		add_recent_event("The arena was closed for rest.")
+	return selected_event
+
+func get_current_event() -> Dictionary:
+	if current_event.is_empty():
+		current_event = _build_fight_event()
+	return _sanitize_event(current_event)
+
 func start_next_fight() -> Dictionary:
+	var today_event: Dictionary = get_current_event()
+	if _is_rest_event(today_event):
+		return {"error": "The arena is closed today. Your gladiators recover."}
 	if not can_start_fight():
 		return {"error": "No available gladiators"}
 
@@ -242,6 +296,7 @@ func start_next_fight() -> Dictionary:
 		"enemy_gladiator_id": str(enemy_fighter.get("id", "")),
 		"attacker_build_id": _build_id_for_class(str(player_fighter.get("class", ""))),
 		"defender_build_id": _build_id_for_class(str(enemy_fighter.get("class", ""))),
+		"event_type": _event_type(today_event),
 	}
 	fight_started.emit(payload)
 	_set_game_state(STATE_IN_FIGHT)
@@ -346,13 +401,14 @@ func award_post_fight_rewards(winner_id: String, loser_id: String, result: Dicti
 	var gold_reward: int = 0
 	var fame_reward: int = 0
 	var player_outcome: String = "UNKNOWN"
+	var reward_multiplier: float = _safe_reward_multiplier(get_current_event())
 
 	if winner_is_player:
-		gold_reward = REWARD_GOLD_VICTORY
+		gold_reward = int(round(float(REWARD_GOLD_VICTORY) * reward_multiplier))
 		fame_reward = REWARD_FAME_PER_WIN
 		player_outcome = "VICTORY"
 	elif loser_is_player and not loser_dead:
-		gold_reward = REWARD_GOLD_DEFEAT_SURVIVED
+		gold_reward = int(round(float(REWARD_GOLD_DEFEAT_SURVIVED) * reward_multiplier))
 		player_outcome = "DEFEAT_SURVIVED"
 	elif loser_is_player and loser_dead:
 		player_outcome = "DEFEAT_KILLED"
@@ -586,7 +642,9 @@ func _roll_loser_death(winner_id: String, loser_id: String, result: Dictionary) 
 		int(result.get("winner_remaining_hp", 0)),
 	]
 	seeded_rng.seed = int(hash(seed_source))
-	return seeded_rng.randf() < LOSS_DEATH_CHANCE
+	var risk_modifier: float = _safe_risk_modifier(get_current_event())
+	var final_death_chance: float = minf(LOSS_DEATH_CHANCE_MAX, LOSS_DEATH_CHANCE * risk_modifier)
+	return seeded_rng.randf() < final_death_chance
 
 func _resolve_player_gladiator_id(winner_id: String, loser_id: String) -> String:
 	var winner_exists: bool = not _find_gladiator_by_id(winner_id).is_empty()
@@ -638,6 +696,9 @@ func _apply_loaded_data(data: Dictionary) -> void:
 		selected_gladiator_id = ""
 	battle_history = _sanitize_battle_history(data.get("battle_history", []))
 	recent_events = _sanitize_recent_events(data.get("recent_events", []))
+	current_event = _sanitize_event(data.get("current_event", {}))
+	if current_event.is_empty():
+		current_event = generate_daily_event()
 
 func _sanitize_roster(raw_value: Variant) -> Array[Dictionary]:
 	var sanitized: Array[Dictionary] = []
@@ -693,6 +754,84 @@ func _sanitize_recent_events(raw_value: Variant) -> Array[String]:
 		sanitized.remove_at(0)
 	return sanitized
 
+func _build_fight_event() -> Dictionary:
+	return {
+		"type": EVENT_TYPE_FIGHT,
+		"name": "Arena Bout",
+		"description": "A standard arena day with balanced rewards and danger.",
+		"reward_multiplier": EVENT_FIGHT_REWARD_MULTIPLIER,
+		"risk_modifier": EVENT_FIGHT_RISK_MODIFIER,
+	}
+
+func _build_hard_fight_event() -> Dictionary:
+	return {
+		"type": EVENT_TYPE_HARD_FIGHT,
+		"name": "Bloodstakes Clash",
+		"description": "A more dangerous arena card with higher rewards and lethal risk.",
+		"reward_multiplier": EVENT_HARD_FIGHT_REWARD_MULTIPLIER,
+		"risk_modifier": EVENT_HARD_FIGHT_RISK_MODIFIER,
+	}
+
+func _build_rest_event() -> Dictionary:
+	return {
+		"type": EVENT_TYPE_REST,
+		"name": "Closed Gates",
+		"description": "The arena is closed today. Your gladiators recover.",
+		"reward_multiplier": EVENT_REST_REWARD_MULTIPLIER,
+		"risk_modifier": EVENT_REST_RISK_MODIFIER,
+	}
+
+func _sanitize_event(raw_event: Variant) -> Dictionary:
+	if typeof(raw_event) != TYPE_DICTIONARY:
+		return {}
+	var source: Dictionary = raw_event as Dictionary
+	var event_type: String = str(source.get("type", EVENT_TYPE_FIGHT)).to_upper()
+	if event_type != EVENT_TYPE_FIGHT and event_type != EVENT_TYPE_HARD_FIGHT and event_type != EVENT_TYPE_REST:
+		event_type = EVENT_TYPE_FIGHT
+	var fallback: Dictionary = _build_fight_event()
+	if event_type == EVENT_TYPE_HARD_FIGHT:
+		fallback = _build_hard_fight_event()
+	elif event_type == EVENT_TYPE_REST:
+		fallback = _build_rest_event()
+	return {
+		"type": event_type,
+		"name": str(source.get("name", str(fallback.get("name", "")))),
+		"description": str(source.get("description", str(fallback.get("description", "")))),
+		"reward_multiplier": _sanitize_multiplier(source.get("reward_multiplier", fallback.get("reward_multiplier", 1.0)), float(fallback.get("reward_multiplier", 1.0))),
+		"risk_modifier": _sanitize_multiplier(source.get("risk_modifier", fallback.get("risk_modifier", 1.0)), float(fallback.get("risk_modifier", 1.0))),
+	}
+
+func _sanitize_multiplier(value: Variant, fallback: float) -> float:
+	var parsed: float = float(value)
+	if is_nan(parsed) or is_inf(parsed) or parsed < 0.0:
+		return fallback
+	return parsed
+
+func _event_type(event_data: Dictionary) -> String:
+	return str(event_data.get("type", EVENT_TYPE_FIGHT)).to_upper()
+
+func _is_rest_event(event_data: Dictionary) -> bool:
+	return _event_type(event_data) == EVENT_TYPE_REST
+
+func _safe_reward_multiplier(event_data: Dictionary) -> float:
+	var reward_multiplier: float = _sanitize_multiplier(event_data.get("reward_multiplier", 1.0), 1.0)
+	return reward_multiplier
+
+func _safe_risk_modifier(event_data: Dictionary) -> float:
+	return _sanitize_multiplier(event_data.get("risk_modifier", 1.0), 1.0)
+
+func apply_rest_day_recovery_bonus() -> void:
+	for gladiator: Dictionary in roster:
+		if not bool(gladiator.get("alive", true)):
+			continue
+		var current_injury_days: int = maxi(0, int(gladiator.get("injured_days", 0)))
+		if current_injury_days <= 0:
+			continue
+		current_injury_days -= 1
+		gladiator["injured_days"] = current_injury_days
+		if current_injury_days == 0:
+			add_recent_event("%s fully recovered during the arena rest day." % get_gladiator_display_name(gladiator))
+
 func _set_game_state(new_state: String) -> void:
 	game_state = new_state
 	game_state_changed.emit(game_state)
@@ -702,3 +841,6 @@ func _emit_resources_updated() -> void:
 
 func _emit_recent_events_updated() -> void:
 	recent_events_updated.emit(get_recent_events())
+
+func _emit_daily_event_updated() -> void:
+	daily_event_updated.emit(get_current_event())
