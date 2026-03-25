@@ -23,10 +23,12 @@ const RECRUIT_COST_RET: int = 30
 const RECRUIT_COST_SEC: int = 30
 const DAILY_UPKEEP_PER_ALIVE: int = 2
 
-const REWARD_GOLD_PER_FIGHT: int = 20
+const REWARD_GOLD_VICTORY: int = 20
+const REWARD_GOLD_DEFEAT_SURVIVED: int = 5
 const REWARD_FAME_PER_WIN: int = 5
 const REWARD_EXP_WINNER: int = 10
 const REWARD_EXP_SURVIVOR_LOSER: int = 3
+const LOSS_DEATH_CHANCE: float = 0.20
 
 const INJURY_DAYS_STANDARD_LOSS: int = 2
 const INJURY_DAYS_SEVERE_LOSS: int = 3
@@ -292,7 +294,9 @@ func resolve_fight(result: Dictionary) -> void:
 	_set_game_state(STATE_RESOLVING_FIGHT)
 	var winner_id: String = str(result.get("winner_id", ""))
 	var loser_id: String = str(result.get("loser_id", ""))
-	var loser_dead: bool = bool(result.get("loser_dead", false))
+	var loser_dead: bool = _roll_loser_death(winner_id, loser_id, result)
+	result["loser_dead"] = loser_dead
+	result["player_gladiator_id"] = _resolve_player_gladiator_id(winner_id, loser_id)
 
 	var winner: Dictionary = _find_gladiator_by_id(winner_id)
 	var loser: Dictionary = _find_gladiator_by_id(loser_id)
@@ -303,12 +307,13 @@ func resolve_fight(result: Dictionary) -> void:
 		if loser_dead:
 			loser["alive"] = false
 			loser["injured_days"] = 0
-			add_recent_event("%s e' MORTO in arena." % get_gladiator_display_name(loser))
+			add_recent_event("%s was slain in the arena." % get_gladiator_display_name(loser))
 		else:
 			apply_injury_from_fight(loser_id, result)
 
 	var reward_summary: Dictionary = award_post_fight_rewards(winner_id, loser_id, result)
 	result["reward_summary"] = reward_summary
+	result["player_outcome"] = str(reward_summary.get("player_outcome", "UNKNOWN"))
 
 	battle_history.append({
 		"day": day,
@@ -324,6 +329,7 @@ func resolve_fight(result: Dictionary) -> void:
 		get_gladiator_display_name(loser) if not loser.is_empty() else loser_id,
 		int(result.get("turns", 0)),
 	])
+	_add_player_outcome_event(winner_id, loser_id, loser_dead, reward_summary)
 
 	save_game()
 	roster_updated.emit()
@@ -333,33 +339,44 @@ func resolve_fight(result: Dictionary) -> void:
 	_set_game_state(STATE_IDLE)
 
 func award_post_fight_rewards(winner_id: String, loser_id: String, result: Dictionary) -> Dictionary:
-	gold += REWARD_GOLD_PER_FIGHT
-	if not _find_gladiator_by_id(winner_id).is_empty():
-		fame += REWARD_FAME_PER_WIN
+	var player_id: String = str(result.get("player_gladiator_id", _resolve_player_gladiator_id(winner_id, loser_id)))
+	var loser_dead: bool = bool(result.get("loser_dead", false))
+	var winner_is_player: bool = winner_id != "" and winner_id == player_id
+	var loser_is_player: bool = loser_id != "" and loser_id == player_id
+	var gold_reward: int = 0
+	var fame_reward: int = 0
+	var player_outcome: String = "UNKNOWN"
 
+	if winner_is_player:
+		gold_reward = REWARD_GOLD_VICTORY
+		fame_reward = REWARD_FAME_PER_WIN
+		player_outcome = "VICTORY"
+	elif loser_is_player and not loser_dead:
+		gold_reward = REWARD_GOLD_DEFEAT_SURVIVED
+		player_outcome = "DEFEAT_SURVIVED"
+	elif loser_is_player and loser_dead:
+		player_outcome = "DEFEAT_KILLED"
+
+	gold += gold_reward
+	fame += fame_reward
 	var progression_summary: Dictionary = {}
-	if not _find_gladiator_by_id(winner_id).is_empty():
+	if winner_is_player and not _find_gladiator_by_id(winner_id).is_empty():
 		progression_summary[winner_id] = {
 			"xp_gained": REWARD_EXP_WINNER,
 			"events": grant_experience(winner_id, REWARD_EXP_WINNER),
 		}
 
-	var loser_dead: bool = bool(result.get("loser_dead", false))
-	if not _find_gladiator_by_id(loser_id).is_empty():
-		if loser_dead:
-			progression_summary[loser_id] = {
-				"xp_gained": 0,
-				"events": [],
-			}
-		else:
-			progression_summary[loser_id] = {
-				"xp_gained": REWARD_EXP_SURVIVOR_LOSER,
-				"events": grant_experience(loser_id, REWARD_EXP_SURVIVOR_LOSER),
-			}
+	if loser_is_player and not _find_gladiator_by_id(loser_id).is_empty():
+		var loser_xp: int = 0 if loser_dead else REWARD_EXP_SURVIVOR_LOSER
+		progression_summary[loser_id] = {
+			"xp_gained": loser_xp,
+			"events": [] if loser_xp <= 0 else grant_experience(loser_id, loser_xp),
+		}
 
 	return {
-		"gold": REWARD_GOLD_PER_FIGHT,
-		"fame": REWARD_FAME_PER_WIN,
+		"gold": gold_reward,
+		"fame": fame_reward,
+		"player_outcome": player_outcome,
 		"progression": progression_summary,
 	}
 
@@ -555,7 +572,49 @@ func _build_match_seed(fighter_a: Dictionary, fighter_b: Dictionary) -> int:
 	return int(hash("%s-%s-%d" % [id_a, id_b, day]))
 
 func _result_has_required_fields(result: Dictionary) -> bool:
-	return result.has("winner_id") and result.has("loser_id") and result.has("turns") and result.has("winner_remaining_hp") and result.has("loser_dead") and result.has("combat_log")
+	return result.has("winner_id") and result.has("loser_id") and result.has("turns") and result.has("winner_remaining_hp") and result.has("combat_log")
+
+func _roll_loser_death(winner_id: String, loser_id: String, result: Dictionary) -> bool:
+	if winner_id == "" or loser_id == "":
+		return false
+	var seeded_rng: RandomNumberGenerator = RandomNumberGenerator.new()
+	var seed_source: String = "%d-%d-%s-%s-%d" % [
+		day,
+		int(result.get("turns", 0)),
+		winner_id,
+		loser_id,
+		int(result.get("winner_remaining_hp", 0)),
+	]
+	seeded_rng.seed = int(hash(seed_source))
+	return seeded_rng.randf() < LOSS_DEATH_CHANCE
+
+func _resolve_player_gladiator_id(winner_id: String, loser_id: String) -> String:
+	var winner_exists: bool = not _find_gladiator_by_id(winner_id).is_empty()
+	var loser_exists: bool = not _find_gladiator_by_id(loser_id).is_empty()
+	if winner_exists and not loser_exists:
+		return winner_id
+	if loser_exists and not winner_exists:
+		return loser_id
+	if selected_gladiator_id != "" and not _find_gladiator_by_id(selected_gladiator_id).is_empty():
+		return selected_gladiator_id
+	if winner_exists:
+		return winner_id
+	if loser_exists:
+		return loser_id
+	return ""
+
+func _add_player_outcome_event(winner_id: String, loser_id: String, loser_dead: bool, reward_summary: Dictionary) -> void:
+	var player_id: String = _resolve_player_gladiator_id(winner_id, loser_id)
+	if player_id == "":
+		return
+	var player_gladiator: Dictionary = _find_gladiator_by_id(player_id)
+	var player_name: String = get_gladiator_display_name(player_gladiator) if not player_gladiator.is_empty() else player_id
+	if winner_id == player_id:
+		add_recent_event("%s won the bout and earned %d gold." % [player_name, int(reward_summary.get("gold", 0))])
+	elif loser_id == player_id and loser_dead:
+		add_recent_event("%s was slain in the arena." % player_name)
+	else:
+		add_recent_event("%s was defeated but survived the arena." % player_name)
 
 func _find_gladiator_by_id(gladiator_id: String) -> Dictionary:
 	for gladiator: Dictionary in roster:

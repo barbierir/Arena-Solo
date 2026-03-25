@@ -5,9 +5,6 @@ const CONTENT_LOADER_SCRIPT: GDScript = preload("res://scripts/data/loaders/Cont
 const RNG_SERVICE_SCRIPT: GDScript = preload("res://scripts/utilities/SeededRngService.gd")
 const COMBAT_SIMULATION_SCRIPT: GDScript = preload("res://scripts/combat/CombatSimulation.gd")
 
-const REWARD_GOLD_PER_FIGHT: int = 20
-const REWARD_FAME_PER_WIN: int = 5
-
 var _content_registry: ContentRegistry
 
 func _ready() -> void:
@@ -51,13 +48,10 @@ func run_payload(payload: Dictionary) -> Dictionary:
 		"loser_id": loser_id,
 		"turns": runtime_state.turn_index,
 		"winner_remaining_hp": 0 if winner_state == null else winner_state.current_hp,
-		"loser_dead": true if loser_state == null else not loser_state.is_alive(),
+		"loser_dead": false,
+		"loser_ko": true if loser_state == null else not loser_state.is_alive(),
 		"combat_log": runtime_state.combat_log.duplicate(),
 		"combat_events": runtime_state.combat_events.duplicate(true),
-		"reward_summary": {
-			"gold": REWARD_GOLD_PER_FIGHT,
-			"fame": REWARD_FAME_PER_WIN,
-		},
 	}
 
 func _ensure_content_loaded() -> void:
