@@ -30,6 +30,8 @@ def build_parser() -> argparse.ArgumentParser:
     sim.add_argument("--runs", type=int, default=1000)
     sim.add_argument("--seed", type=int, default=1001)
     sim.add_argument("--max-turns", type=int, default=128)
+    sim.add_argument("--verbose", action="store_true", help="Print active matchup modifiers")
+    sim.add_argument("--no-matchup-modifiers", action="store_true", help="Disable matchup modifiers")
     sim.add_argument("--output")
 
     val = sub.add_parser("validate", help="Compare Python aggregate output to Godot batch report JSON")
@@ -37,6 +39,8 @@ def build_parser() -> argparse.ArgumentParser:
     val.add_argument("--runs", type=int, default=1000)
     val.add_argument("--seed", type=int, default=6100)
     val.add_argument("--max-turns", type=int, default=128)
+    val.add_argument("--verbose", action="store_true", help="Print active matchup modifiers")
+    val.add_argument("--no-matchup-modifiers", action="store_true", help="Disable matchup modifiers")
     val.add_argument("--output")
 
     opt = sub.add_parser("optimize", help="Search a bounded parameter space for balance candidates")
@@ -45,6 +49,8 @@ def build_parser() -> argparse.ArgumentParser:
     opt.add_argument("--seed", type=int, default=4242)
     opt.add_argument("--max-turns", type=int, default=128)
     opt.add_argument("--param-config")
+    opt.add_argument("--verbose", action="store_true", help="Print active matchup modifiers")
+    opt.add_argument("--no-matchup-modifiers", action="store_true", help="Disable matchup modifiers")
     opt.add_argument("--output")
 
     return p
@@ -55,13 +61,39 @@ def main() -> None:
     defs_dir = Path(args.definitions_dir)
 
     if args.command == "simulate":
-        payload = run_batch(defs_dir, args.attacker, args.defender, args.seed, args.runs, args.max_turns)
+        payload = run_batch(
+            defs_dir,
+            args.attacker,
+            args.defender,
+            args.seed,
+            args.runs,
+            args.max_turns,
+            enable_matchup_modifiers=not args.no_matchup_modifiers,
+            verbose=args.verbose,
+        )
         _write_output(payload, args.output)
     elif args.command == "validate":
-        payload = compare_suite_to_references(defs_dir, Path(args.reference_dir), args.runs, args.max_turns, args.seed)
+        payload = compare_suite_to_references(
+            defs_dir,
+            Path(args.reference_dir),
+            args.runs,
+            args.max_turns,
+            args.seed,
+            enable_matchup_modifiers=not args.no_matchup_modifiers,
+            verbose=args.verbose,
+        )
         _write_output(payload, args.output)
     elif args.command == "optimize":
-        payload = optimize(defs_dir, args.trials, args.runs, args.max_turns, args.seed, Path(args.param_config) if args.param_config else None)
+        payload = optimize(
+            defs_dir,
+            args.trials,
+            args.runs,
+            args.max_turns,
+            args.seed,
+            Path(args.param_config) if args.param_config else None,
+            enable_matchup_modifiers=not args.no_matchup_modifiers,
+            verbose=args.verbose,
+        )
         _write_output(payload, args.output)
 
 

@@ -25,6 +25,7 @@ Standalone local tool for fast combat-balance iteration without launching Godot.
 - `validate.py` – compare Python suite outputs to Godot batch report JSONs
 - `optimize.py` – bounded grid/random candidate search and scoring
 - `cli.py` – argparse entrypoint
+- `matchup_modifiers.py` – centralized matchup-specific modifier loading
 
 ## Install / run
 
@@ -41,6 +42,69 @@ Optional output file:
 ```bash
 python -m tools.sim_optimizer.cli simulate --attacker RET_STARTER --defender SEC_STARTER --runs 1000 --seed 1001 --output out/sim.json
 ```
+
+Show active matchup modifiers while running:
+
+```bash
+python -m tools.sim_optimizer.cli simulate --attacker RET_STARTER --defender SEC_STARTER --runs 1000 --seed 1001 --verbose
+```
+
+Disable matchup modifiers (baseline behavior):
+
+```bash
+python -m tools.sim_optimizer.cli simulate --attacker RET_STARTER --defender SEC_STARTER --runs 1000 --seed 1001 --no-matchup-modifiers
+```
+
+## Matchup Modifiers
+
+Purpose:
+
+- Apply small, explicit context tweaks per `ATTACKER_vs_DEFENDER` pairing without editing base class/build data.
+- Keep all such tweaks in one centralized file.
+
+File location:
+
+- `tools/sim_optimizer/matchup_modifiers.json`
+
+Supported modifiers (current scope only):
+
+- `attacker_bonus_hp` – applied to attacker's starting HP only
+- `defender_bonus_hp` – applied to defender's starting HP only
+- `both_bonus_hp` – applied to both combatants' starting HP
+- `global_damage_multiplier` – multiplies final damage after normal damage/crit math
+- `recover_value_multiplier` – scales `RECOVER` stamina gain only
+
+If a matchup key is missing, no modifiers are applied for that matchup.
+
+Example config:
+
+```json
+{
+  "RET_STARTER_vs_RET_STARTER": {
+    "global_damage_multiplier": 0.9
+  },
+  "SEC_STARTER_vs_SEC_STARTER": {
+    "recover_value_multiplier": 0.8
+  },
+  "RET_STARTER_vs_SEC_STARTER": {
+    "attacker_bonus_hp": 1
+  },
+  "SEC_STARTER_vs_RET_STARTER": {
+    "defender_bonus_hp": 1
+  }
+}
+```
+
+How to tweak:
+
+1. Edit/add matchup keys in `tools/sim_optimizer/matchup_modifiers.json`.
+2. Re-run `simulate`, `optimize`, or `validate` normally (modifiers apply automatically).
+3. Use `--verbose` to print active modifiers and confirm the applied map.
+
+How to disable:
+
+- Add `--no-matchup-modifiers` to `simulate`, `optimize`, or `validate`.
+- This is useful for validation baselines against historical Godot reports.
 
 ## Validation against Godot batch reports
 

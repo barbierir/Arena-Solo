@@ -10,13 +10,15 @@ from .models import CombatRuntime, CombatantState, Definitions, RuntimeStatus
 
 
 class CombatEngine:
-    def __init__(self, definitions: Definitions, seed: int):
+    def __init__(self, definitions: Definitions, seed: int, matchup_modifiers: dict[str, Any] | None = None):
         self.defs = definitions
         self.rng = random.Random(seed)
+        self.matchup_modifiers = matchup_modifiers or {}
 
     def initialize_fight(self, attacker_build_id: str, defender_build_id: str) -> CombatRuntime:
         a = self._make_combatant_state(attacker_build_id, CombatRuntime.ATTACKER_SIDE_ID)
         b = self._make_combatant_state(defender_build_id, CombatRuntime.DEFENDER_SIDE_ID)
+        self._apply_initial_hp_modifiers(a, b)
         runtime = CombatRuntime(
             attacker_build_id=attacker_build_id,
             defender_build_id=defender_build_id,
@@ -25,6 +27,18 @@ class CombatEngine:
         runtime.next_actor_id = self._resolve_first_actor(runtime)
         runtime.append_log(f"Encounter initialized: {attacker_build_id} vs {defender_build_id}")
         return runtime
+
+    def _apply_initial_hp_modifiers(self, attacker: CombatantState, defender: CombatantState) -> None:
+        attacker_bonus = int(self.matchup_modifiers.get("attacker_bonus_hp", 0))
+        defender_bonus = int(self.matchup_modifiers.get("defender_bonus_hp", 0))
+        both_bonus = int(self.matchup_modifiers.get("both_bonus_hp", 0))
+
+        if attacker_bonus or both_bonus:
+            attacker.max_hp += attacker_bonus + both_bonus
+            attacker.current_hp = attacker.max_hp
+        if defender_bonus or both_bonus:
+            defender.max_hp += defender_bonus + both_bonus
+            defender.current_hp = defender.max_hp
 
     def run_to_completion(self, runtime: CombatRuntime, max_turns: int = 64) -> CombatRuntime:
         for _ in range(max_turns):
@@ -128,6 +142,8 @@ class CombatEngine:
 
         if skill_id == "RECOVER":
             gain = int(controls.get("recover_bonus_stamina", 2))
+            recover_multiplier = float(self.matchup_modifiers.get("recover_value_multiplier", 1.0))
+            gain = max(0, round(gain * recover_multiplier))
             actor.current_sta = min(actor.max_sta, actor.current_sta + gain)
             runtime.append_event("ACTION_USED", self._action_payload(actor, target, skill_id, False, 0))
             return
@@ -148,6 +164,8 @@ class CombatEngine:
         crit_chance = self._calculate_crit(actor, skill)
         is_crit = self.rng.random() <= crit_chance
         damage = round(base_damage * float(controls.get("crit_multiplier", 2.0))) if is_crit else base_damage
+        damage_multiplier = float(self.matchup_modifiers.get("global_damage_multiplier", 1.0))
+        damage = max(int(controls.get("min_damage", 1)), round(damage * damage_multiplier))
         target.current_hp = max(0, target.current_hp - damage)
         payload = self._action_payload(actor, target, skill_id, True, damage)
         payload["is_crit"] = is_crit
