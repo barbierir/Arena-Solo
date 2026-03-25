@@ -1,0 +1,7 @@
+{
+  "SECUTOR.base_def": [5, 6, 7],
+  "SECUTOR.base_sta": [7, 8, 9],
+  "SHIELD_BASH.sta_cost": [3, 4, 5],
+  "SHIELD_BASH.flat_damage": [0, 1, 2],
+  "RECOVER.sta_cost": [0, 1]
+}
