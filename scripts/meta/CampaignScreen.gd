@@ -8,6 +8,8 @@ const COMBAT_ADAPTER_SCRIPT: GDScript = preload("res://scripts/combat/bridge/Cam
 @onready var _day_value: Label = %DayValue
 @onready var _state_value: Label = %StateValue
 @onready var _roster_list: ItemList = %RosterList
+@onready var _selected_fighter_value: Label = %SelectedFighterValue
+@onready var _game_over_label: Label = %GameOverLabel
 @onready var _event_log: RichTextLabel = %EventLog
 @onready var _start_fight_button: Button = %StartFightButton
 @onready var _new_game_button: Button = %NewGameButton
@@ -21,6 +23,7 @@ const COMBAT_ADAPTER_SCRIPT: GDScript = preload("res://scripts/combat/bridge/Cam
 
 var _combat_adapter: CampaignCombatAdapter
 var _is_fight_flow_active: bool = false
+var _roster_ids_by_index: Array[String] = []
 
 func _ready() -> void:
 	_combat_adapter = COMBAT_ADAPTER_SCRIPT.new()
@@ -68,6 +71,16 @@ func _on_start_fight_pressed() -> void:
 		GameManager.add_recent_event("Impossibile avviare incontro: %s" % str(payload.get("error", "")))
 		_refresh_recent_events()
 
+func _on_roster_list_item_selected(index: int) -> void:
+	if index < 0 or index >= _roster_ids_by_index.size():
+		return
+	var gladiator_id: String = _roster_ids_by_index[index]
+	if not GameManager.set_selected_gladiator(gladiator_id):
+		GameManager.add_recent_event("Selezione non valida: %s." % gladiator_id)
+		_refresh_recent_events()
+		return
+	_refresh_selected_fighter()
+
 func _on_save_pressed() -> void:
 	var saved: bool = GameManager.save_game()
 	GameManager.add_recent_event("Salvataggio %s." % ("ok" if saved else "fallito"))
@@ -89,6 +102,7 @@ func _on_resources_updated(gold: int, fame: int, day: int) -> void:
 
 func _on_roster_updated() -> void:
 	_render_roster()
+	_refresh_selected_fighter()
 	if not _is_fight_flow_active:
 		_start_fight_button.disabled = not GameManager.can_start_fight()
 
@@ -148,12 +162,15 @@ func _refresh_all() -> void:
 	_on_resources_updated(GameManager.gold, GameManager.fame, GameManager.day)
 	_on_state_changed(GameManager.game_state)
 	_render_roster()
+	_refresh_selected_fighter()
 	_refresh_recent_events()
+	_refresh_game_over_state()
 	if not _is_fight_flow_active:
 		_start_fight_button.disabled = not GameManager.can_start_fight()
 
 func _render_roster() -> void:
 	_roster_list.clear()
+	_roster_ids_by_index.clear()
 	var roster: Array[Dictionary] = GameManager.get_roster()
 	for gladiator: Dictionary in roster:
 		var status: String = GameManager.get_gladiator_status(gladiator)
@@ -178,6 +195,13 @@ func _render_roster() -> void:
 			int(gladiator.get("losses", 0)),
 		]
 		_roster_list.add_item(row)
+		_roster_ids_by_index.append(str(gladiator.get("id", "")))
+	var selected_id: String = GameManager.get_selected_gladiator_id()
+	if selected_id == "":
+		return
+	var selected_index: int = _roster_ids_by_index.find(selected_id)
+	if selected_index >= 0:
+		_roster_list.select(selected_index)
 
 func _refresh_recent_events() -> void:
 	_event_log.clear()
@@ -186,10 +210,39 @@ func _refresh_recent_events() -> void:
 		_event_log.append_text("%s\n" % event_text)
 
 func _set_campaign_controls_enabled(enabled: bool) -> void:
+	var is_game_over: bool = GameManager.is_game_over()
+	var can_fight_now: bool = enabled and GameManager.can_start_fight() and not is_game_over
 	_new_game_button.disabled = not enabled
 	_recruit_ret_button.disabled = not enabled
 	_recruit_sec_button.disabled = not enabled
 	_advance_day_button.disabled = not enabled
-	_start_fight_button.disabled = (not enabled) or (not GameManager.can_start_fight())
+	_start_fight_button.disabled = not can_fight_now
 	_save_button.disabled = not enabled
 	_load_button.disabled = not enabled
+	_roster_list.select_mode = ItemList.SELECT_SINGLE
+	_roster_list.disabled = not enabled
+	_refresh_game_over_state()
+
+func _refresh_selected_fighter() -> void:
+	var selected: Dictionary = GameManager.get_selected_gladiator()
+	if selected.is_empty():
+		var available: Array[Dictionary] = GameManager.get_available_gladiators()
+		if not available.is_empty():
+			var fallback_id: String = str(available[0].get("id", ""))
+			GameManager.set_selected_gladiator(fallback_id)
+			selected = GameManager.get_selected_gladiator()
+	if selected.is_empty():
+		_selected_fighter_value.text = "None"
+		return
+	_selected_fighter_value.text = "%s (%s, Lv %d)" % [
+		GameManager.get_gladiator_display_name(selected),
+		str(selected.get("class", "")),
+		int(selected.get("level", selected.get("livello", 1))),
+	]
+
+func _refresh_game_over_state() -> void:
+	if GameManager.is_game_over():
+		_game_over_label.visible = true
+		_game_over_label.text = "GAME OVER: Nessun gladiatore vivo nel roster."
+		return
+	_game_over_label.visible = false

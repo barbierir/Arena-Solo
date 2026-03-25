@@ -127,6 +127,13 @@ unique_name_in_owner = true
 layout_mode = 2
 text = "Load"
 
+[node name="GameOverLabel" type="Label" parent="Margin/RootVBox/ActionsPanel/ActionsMargin"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_colors/font_color = Color(0.86, 0.2, 0.2, 1)
+text = "GAME OVER: Nessun gladiatore vivo nel roster."
+visible = false
+
 [node name="ContentRow" type="HSplitContainer" parent="Margin/RootVBox"]
 layout_mode = 2
 size_flags_vertical = 3
@@ -151,6 +158,15 @@ size_flags_vertical = 3
 [node name="RosterTitle" type="Label" parent="Margin/RootVBox/ContentRow/RosterPanel/RosterMargin/RosterVBox"]
 layout_mode = 2
 text = "Roster"
+
+[node name="SelectedFighterTitle" type="Label" parent="Margin/RootVBox/ContentRow/RosterPanel/RosterMargin/RosterVBox"]
+layout_mode = 2
+text = "Selected Fighter:"
+
+[node name="SelectedFighterValue" type="Label" parent="Margin/RootVBox/ContentRow/RosterPanel/RosterMargin/RosterVBox"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "None"
 
 [node name="RosterList" type="ItemList" parent="Margin/RootVBox/ContentRow/RosterPanel/RosterMargin/RosterVBox"]
 unique_name_in_owner = true
@@ -228,3 +244,4 @@ layout_mode = 1
 [connection signal="pressed" from="Margin/RootVBox/ActionsPanel/ActionsMargin/Buttons/StartFightButton" to="." method="_on_start_fight_pressed"]
 [connection signal="pressed" from="Margin/RootVBox/ActionsPanel/ActionsMargin/Buttons/SaveButton" to="." method="_on_save_pressed"]
 [connection signal="pressed" from="Margin/RootVBox/ActionsPanel/ActionsMargin/Buttons/LoadButton" to="." method="_on_load_pressed"]
+[connection signal="item_selected" from="Margin/RootVBox/ContentRow/RosterPanel/RosterMargin/RosterVBox/RosterList" to="." method="_on_roster_list_item_selected"]
