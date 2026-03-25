@@ -152,7 +152,10 @@ func _on_fight_resolved(result: Dictionary) -> void:
 	_set_campaign_controls_enabled(true)
 	var winner_id: String = str(result.get("winner_id", ""))
 	var loser_id: String = str(result.get("loser_id", ""))
-	_last_fight_result.text = "Vincitore: %s | Sconfitto: %s | Turni: %d | HP Vincitore: %d | Morte: %s" % [
+	var player_outcome: String = str(result.get("player_outcome", "UNKNOWN"))
+	var outcome_label: String = _build_outcome_label(player_outcome)
+	_last_fight_result.text = "Outcome: %s | Vincitore: %s | Sconfitto: %s | Turni: %d | HP Vincitore: %d | Morte: %s" % [
+		outcome_label,
 		winner_id if winner_id != "" else "N/A",
 		loser_id if loser_id != "" else "N/A",
 		int(result.get("turns", 0)),
@@ -160,6 +163,15 @@ func _on_fight_resolved(result: Dictionary) -> void:
 		"SI" if bool(result.get("loser_dead", false)) else "NO",
 	]
 	_refresh_all()
+
+func _build_outcome_label(player_outcome: String) -> String:
+	if player_outcome == "VICTORY":
+		return "Victory"
+	if player_outcome == "DEFEAT_SURVIVED":
+		return "Defeat - Survived"
+	if player_outcome == "DEFEAT_KILLED":
+		return "Defeat - Killed"
+	return "Unknown"
 
 func _refresh_all() -> void:
 	_on_resources_updated(GameManager.gold, GameManager.fame, GameManager.day)

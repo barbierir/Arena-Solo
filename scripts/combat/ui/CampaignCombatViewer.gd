@@ -204,7 +204,10 @@ func _build_result_text(result: Dictionary) -> String:
 	lines.append("Sconfitto: %s" % loser_name)
 	lines.append("Turni totali: %d" % int(result.get("turns", 0)))
 	lines.append("HP residui vincitore: %d" % int(result.get("winner_remaining_hp", 0)))
-	lines.append("Morte: %s" % ("SI" if bool(result.get("loser_dead", false)) else "NO"))
+	lines.append("Esito combattimento: KO (morte decisa nel post-fight)")
+	var player_outcome: String = str(result.get("player_outcome", ""))
+	if player_outcome != "":
+		lines.append("Outcome: %s" % player_outcome)
 	var reward: Dictionary = result.get("reward_summary", {})
 	if not reward.is_empty():
 		lines.append("Reward: +%d Gold, +%d Fame" % [
