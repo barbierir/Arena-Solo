@@ -22,17 +22,22 @@ grow_horizontal = 2
 grow_vertical = 2
 color = Color(0, 0, 0, 0.45)
 
-[node name="Center" type="CenterContainer" parent="."]
+[node name="Center" type="MarginContainer" parent="."]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
+theme_override_constants/margin_left = 20
+theme_override_constants/margin_top = 20
+theme_override_constants/margin_right = 20
+theme_override_constants/margin_bottom = 20
 
 [node name="Panel" type="PanelContainer" parent="Center"]
-custom_minimum_size = Vector2(980, 620)
 layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
 
 [node name="Margin" type="MarginContainer" parent="Center/Panel"]
 layout_mode = 2
@@ -150,10 +155,12 @@ theme_override_constants/margin_bottom = 8
 
 [node name="ResultText" type="RichTextLabel" parent="Center/Panel/Margin/RootVBox/ResultPanel/ResultMargin"]
 unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 110)
 layout_mode = 2
+size_flags_vertical = 1
 bbcode_enabled = true
-fit_content = true
-scroll_active = false
+fit_content = false
+scroll_active = true
 
 [node name="Footer" type="HBoxContainer" parent="Center/Panel/Margin/RootVBox"]
 layout_mode = 2

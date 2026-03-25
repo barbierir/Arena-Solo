@@ -40,9 +40,9 @@ func show_fight(payload: Dictionary, result: Dictionary) -> void:
 	_fight_payload = payload.duplicate(true)
 	_fight_result = result.duplicate(true)
 	visible = true
-	grab_focus()
 	_prepare_fighters(payload)
 	_build_timeline(result)
+	call_deferred("_focus_primary_action")
 	if _timeline.is_empty():
 		_log_label.append_text("Nessun evento disponibile.\n")
 		_finalize_playback()
@@ -107,6 +107,23 @@ func _reset_viewer() -> void:
 	_next_button.disabled = false
 	_play_all_button.disabled = false
 	_close_button.disabled = true
+
+func _focus_primary_action() -> void:
+	_ensure_button_focusable(_play_all_button)
+	_ensure_button_focusable(_next_button)
+	_ensure_button_focusable(_close_button)
+	if _play_all_button.visible and not _play_all_button.disabled:
+		_play_all_button.grab_focus()
+		return
+	if _next_button.visible and not _next_button.disabled:
+		_next_button.grab_focus()
+		return
+	if _close_button.visible and not _close_button.disabled:
+		_close_button.grab_focus()
+
+func _ensure_button_focusable(button: Button) -> void:
+	if button.focus_mode == Control.FOCUS_NONE:
+		button.focus_mode = Control.FOCUS_ALL
 
 func _prepare_fighters(payload: Dictionary) -> void:
 	var fighter_a: Dictionary = payload.get("fighter_a", {})
