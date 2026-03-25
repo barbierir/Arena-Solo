@@ -5,6 +5,7 @@ var turn_index: int = 0
 var attacker_build_id: String = ""
 var defender_build_id: String = ""
 var combatant_states: Dictionary = {}
+var matchup_modifiers: Dictionary = {}
 var combat_log: Array[String] = []
 var combat_events: Array[Dictionary] = []
 var result_state: String = "PENDING"
