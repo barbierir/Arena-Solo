@@ -96,6 +96,17 @@ Combat content is loaded from modular JSON files in:
 - `data/definitions/status_effects.json`
 - `data/definitions/ai_profiles.json`
 - `data/definitions/encounters.json`
+- `data/definitions/matchup_modifiers.json` (optional matchup-specific overrides)
+
+### Matchup modifiers data note
+
+- Purpose: provides optional per-matchup tuning hooks without changing base build/class definitions.
+- Key format: `ATTACKER_BUILD_ID_vs_DEFENDER_BUILD_ID` (example: `RET_STARTER_vs_SEC_STARTER`).
+- Supported fields:
+  - `attacker_bonus_hp`
+  - `defender_bonus_hp`
+  - `both_bonus_hp`
+  - `global_damage_multiplier`
 
 ## Deterministic seeding model
 

@@ -32,6 +32,8 @@ func initialize_fight(attacker_build_id: String, defender_build_id: String) -> v
 	runtime_state.defender_build_id = defender_build_id
 	runtime_state.combatant_states[CombatRuntimeState.ATTACKER_SIDE_ID] = _make_combatant_state(attacker_build_id, CombatRuntimeState.ATTACKER_SIDE_ID)
 	runtime_state.combatant_states[CombatRuntimeState.DEFENDER_SIDE_ID] = _make_combatant_state(defender_build_id, CombatRuntimeState.DEFENDER_SIDE_ID)
+	# Matchup modifiers are resolved once at encounter start and then consumed by
+	# downstream systems (HP initialization here, damage multiplier in DamageSystem).
 	runtime_state.matchup_modifiers = matchup_modifier_resolver.resolve(attacker_build_id, defender_build_id, content_registry)
 	_apply_matchup_hp_modifiers(runtime_state)
 	runtime_state.next_actor_id = _resolve_first_actor()
@@ -100,6 +102,8 @@ func _apply_matchup_hp_modifiers(state: CombatRuntimeState) -> void:
 	var modifiers: Dictionary = state.matchup_modifiers
 	if modifiers.is_empty():
 		return
+	# HP-only matchup fields are applied during encounter bootstrap before turn 1.
+	# "both_bonus_hp" stacks with side-specific bonus fields when present.
 	var attacker_bonus: int = int(modifiers.get("attacker_bonus_hp", 0)) + int(modifiers.get("both_bonus_hp", 0))
 	var defender_bonus: int = int(modifiers.get("defender_bonus_hp", 0)) + int(modifiers.get("both_bonus_hp", 0))
 	if attacker_bonus != 0:
