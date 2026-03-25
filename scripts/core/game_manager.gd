@@ -6,6 +6,7 @@ signal resources_updated(gold: int, fame: int, day: int)
 signal fight_started(payload: Dictionary)
 signal fight_resolved(result: Dictionary)
 signal save_completed(success: bool)
+signal recent_events_updated(events: Array[String])
 
 const SAVE_PATH: String = "user://savegame.json"
 
@@ -27,8 +28,15 @@ const REWARD_FAME_PER_WIN: int = 5
 const REWARD_EXP_WINNER: int = 10
 const REWARD_EXP_SURVIVOR_LOSER: int = 3
 
-const LOSER_INJURY_DAYS_MIN: int = 1
-const LOSER_INJURY_DAYS_MAX: int = 3
+const INJURY_DAYS_STANDARD_LOSS: int = 2
+const INJURY_DAYS_SEVERE_LOSS: int = 3
+
+const LEVEL_CAP: int = 5
+const RECENT_EVENTS_MAX: int = 10
+
+const STATUS_AVAILABLE: String = "AVAILABLE"
+const STATUS_INJURED: String = "INJURED"
+const STATUS_DEAD: String = "DEAD"
 
 const RET_BUILD_ID: String = "RET_STARTER"
 const SEC_BUILD_ID: String = "SEC_STARTER"
@@ -42,6 +50,7 @@ var day: int = STARTING_DAY
 var next_gladiator_index: int = 1
 var roster: Array[Dictionary] = []
 var battle_history: Array[Dictionary] = []
+var recent_events: Array[String] = []
 var game_state: String = STATE_IDLE
 
 var _content_registry: ContentRegistry
@@ -57,13 +66,16 @@ func new_game() -> void:
 	next_gladiator_index = 1
 	roster.clear()
 	battle_history.clear()
+	recent_events.clear()
 	_set_game_state(STATE_IDLE)
 	recruit_gladiator("RET")
 	recruit_gladiator("SEC")
+	add_recent_event("Nuova campagna avviata (giorno %d)." % day)
 	var saved: bool = save_game()
 	save_completed.emit(saved)
 	roster_updated.emit()
 	_emit_resources_updated()
+	_emit_recent_events_updated()
 
 func load_game() -> bool:
 	if not FileAccess.file_exists(SAVE_PATH):
@@ -90,6 +102,7 @@ func load_game() -> bool:
 	_set_game_state(str(data.get("game_state", STATE_IDLE)))
 	roster_updated.emit()
 	_emit_resources_updated()
+	_emit_recent_events_updated()
 	return true
 
 func save_game() -> bool:
@@ -101,6 +114,7 @@ func save_game() -> bool:
 		"game_state": game_state,
 		"roster": roster,
 		"battle_history": battle_history,
+		"recent_events": recent_events,
 	}
 	var serialized: String = JSON.stringify(payload, "\t", false)
 	var file: FileAccess = FileAccess.open(SAVE_PATH, FileAccess.WRITE)
@@ -120,14 +134,18 @@ func advance_day() -> void:
 	save_game()
 	roster_updated.emit()
 	_emit_resources_updated()
+	_emit_recent_events_updated()
 
 func get_roster() -> Array[Dictionary]:
 	return roster.duplicate(true)
 
+func get_recent_events() -> Array[String]:
+	return recent_events.duplicate()
+
 func get_available_gladiators() -> Array[Dictionary]:
 	var available: Array[Dictionary] = []
 	for gladiator: Dictionary in roster:
-		if bool(gladiator.get("alive", false)) and int(gladiator.get("injured_days", 0)) <= 0:
+		if get_gladiator_status(gladiator) == STATUS_AVAILABLE:
 			available.append(gladiator.duplicate(true))
 	return available
 
@@ -143,6 +161,7 @@ func recruit_gladiator(gladiator_class: String) -> Dictionary:
 	gold -= recruit_cost
 	roster.append(gladiator)
 	next_gladiator_index += 1
+	add_recent_event("Reclutato %s." % get_gladiator_display_name(gladiator))
 	save_game()
 	roster_updated.emit()
 	_emit_resources_updated()
@@ -174,7 +193,6 @@ func start_next_fight() -> Dictionary:
 	_set_game_state(STATE_IN_FIGHT)
 	return payload
 
-
 func abort_active_fight(reason: String = "") -> void:
 	if game_state == STATE_IDLE:
 		return
@@ -202,10 +220,13 @@ func resolve_fight(result: Dictionary) -> void:
 		if loser_dead:
 			loser["alive"] = false
 			loser["injured_days"] = 0
+			add_recent_event("%s e' MORTO in arena." % get_gladiator_display_name(loser))
 		else:
-			loser["injured_days"] = _injury_days_for_loser(loser)
+			apply_injury_from_fight(loser_id, result)
 
-	award_post_fight_rewards(winner_id, loser_id, result)
+	var reward_summary: Dictionary = award_post_fight_rewards(winner_id, loser_id, result)
+	result["reward_summary"] = reward_summary
+
 	battle_history.append({
 		"day": day,
 		"winner_id": winner_id,
@@ -215,24 +236,46 @@ func resolve_fight(result: Dictionary) -> void:
 		"loser_dead": loser_dead,
 		"combat_log": result.get("combat_log", []),
 	})
+	add_recent_event("Combattimento concluso: %s ha sconfitto %s in %d turni." % [
+		get_gladiator_display_name(winner) if not winner.is_empty() else winner_id,
+		get_gladiator_display_name(loser) if not loser.is_empty() else loser_id,
+		int(result.get("turns", 0)),
+	])
 
 	save_game()
 	roster_updated.emit()
 	_emit_resources_updated()
+	_emit_recent_events_updated()
 	fight_resolved.emit(result)
 	_set_game_state(STATE_IDLE)
 
-func award_post_fight_rewards(winner_id: String, loser_id: String, result: Dictionary) -> void:
+func award_post_fight_rewards(winner_id: String, loser_id: String, result: Dictionary) -> Dictionary:
 	gold += REWARD_GOLD_PER_FIGHT
 	fame += REWARD_FAME_PER_WIN
-	var winner: Dictionary = _find_gladiator_by_id(winner_id)
-	if not winner.is_empty():
-		winner["esperienza"] = int(winner.get("esperienza", 0)) + REWARD_EXP_WINNER
-		winner["livello"] = _level_from_exp(int(winner.get("esperienza", 0)))
-	var loser: Dictionary = _find_gladiator_by_id(loser_id)
-	if not loser.is_empty() and not bool(result.get("loser_dead", false)):
-		loser["esperienza"] = int(loser.get("esperienza", 0)) + REWARD_EXP_SURVIVOR_LOSER
-		loser["livello"] = _level_from_exp(int(loser.get("esperienza", 0)))
+
+	var progression_summary: Dictionary = {}
+	progression_summary[winner_id] = {
+		"xp_gained": REWARD_EXP_WINNER,
+		"events": grant_experience(winner_id, REWARD_EXP_WINNER),
+	}
+
+	var loser_dead: bool = bool(result.get("loser_dead", false))
+	if loser_dead:
+		progression_summary[loser_id] = {
+			"xp_gained": 0,
+			"events": [],
+		}
+	else:
+		progression_summary[loser_id] = {
+			"xp_gained": REWARD_EXP_SURVIVOR_LOSER,
+			"events": grant_experience(loser_id, REWARD_EXP_SURVIVOR_LOSER),
+		}
+
+	return {
+		"gold": REWARD_GOLD_PER_FIGHT,
+		"fame": REWARD_FAME_PER_WIN,
+		"progression": progression_summary,
+	}
 
 func apply_daily_upkeep() -> void:
 	var alive_count: int = 0
@@ -243,9 +286,91 @@ func apply_daily_upkeep() -> void:
 
 func heal_and_update_injuries() -> void:
 	for gladiator: Dictionary in roster:
-		var current_injury_days: int = int(gladiator.get("injured_days", 0))
+		if not bool(gladiator.get("alive", true)):
+			gladiator["injured_days"] = 0
+			continue
+		var current_injury_days: int = maxi(0, int(gladiator.get("injured_days", 0)))
 		if current_injury_days > 0:
-			gladiator["injured_days"] = maxi(0, current_injury_days - 1)
+			current_injury_days -= 1
+			gladiator["injured_days"] = current_injury_days
+			if current_injury_days == 0:
+				add_recent_event("%s ha recuperato dalle ferite." % get_gladiator_display_name(gladiator))
+
+func get_gladiator_status(gladiator: Dictionary) -> String:
+	if not bool(gladiator.get("alive", true)):
+		return STATUS_DEAD
+	if int(gladiator.get("injured_days", 0)) > 0:
+		return STATUS_INJURED
+	return STATUS_AVAILABLE
+
+func get_gladiator_display_name(gladiator: Dictionary) -> String:
+	return str(gladiator.get("nome", str(gladiator.get("id", "Unknown"))))
+
+func required_exp_for_level(level: int) -> int:
+	if level >= LEVEL_CAP:
+		return 0
+	return 10 + maxi(0, level - 1) * 5
+
+func grant_experience(gladiator_id: String, amount: int) -> Array[Dictionary]:
+	var events: Array[Dictionary] = []
+	if amount <= 0:
+		return events
+	var gladiator: Dictionary = _find_gladiator_by_id(gladiator_id)
+	if gladiator.is_empty():
+		push_warning("GameManager.grant_experience: gladiator not found for id=%s" % gladiator_id)
+		return events
+	if not bool(gladiator.get("alive", true)):
+		return events
+	gladiator["experience"] = maxi(0, int(gladiator.get("experience", 0)) + amount)
+	gladiator["esperienza"] = int(gladiator.get("experience", 0))
+	events = process_level_ups(gladiator)
+	return events
+
+func process_level_ups(gladiator: Dictionary) -> Array[Dictionary]:
+	var events: Array[Dictionary] = []
+	if gladiator.is_empty() or not bool(gladiator.get("alive", true)):
+		return events
+	var current_level: int = clampi(int(gladiator.get("level", gladiator.get("livello", 1))), 1, LEVEL_CAP)
+	var current_exp: int = maxi(0, int(gladiator.get("experience", gladiator.get("esperienza", 0))))
+	while current_level < LEVEL_CAP:
+		var needed_exp: int = required_exp_for_level(current_level)
+		if current_exp < needed_exp:
+			break
+		current_exp -= needed_exp
+		current_level += 1
+		_apply_level_growth(gladiator, current_level)
+		var message: String = "%s ha raggiunto il livello %d." % [get_gladiator_display_name(gladiator), current_level]
+		add_recent_event(message)
+		events.append({
+			"type": "LEVEL_UP",
+			"message": message,
+			"new_level": current_level,
+		})
+	gladiator["level"] = current_level
+	gladiator["livello"] = current_level
+	gladiator["experience"] = current_exp
+	gladiator["esperienza"] = current_exp
+	return events
+
+func apply_injury_from_fight(gladiator_id: String, result: Dictionary) -> void:
+	var gladiator: Dictionary = _find_gladiator_by_id(gladiator_id)
+	if gladiator.is_empty() or not bool(gladiator.get("alive", true)):
+		return
+	var injury_days: int = INJURY_DAYS_STANDARD_LOSS
+	var fight_turns: int = int(result.get("turns", 0))
+	var winner_remaining_hp: int = int(result.get("winner_remaining_hp", 0))
+	if fight_turns >= 14 or winner_remaining_hp <= 2:
+		injury_days = INJURY_DAYS_SEVERE_LOSS
+	gladiator["injured_days"] = maxi(1, injury_days)
+	add_recent_event("%s e' ferito per %d giorni." % [get_gladiator_display_name(gladiator), injury_days])
+
+func add_recent_event(event_text: String) -> void:
+	var normalized: String = event_text.strip_edges()
+	if normalized == "":
+		return
+	recent_events.append("Day %d - %s" % [day, normalized])
+	while recent_events.size() > RECENT_EVENTS_MAX:
+		recent_events.remove_at(0)
 
 func _bootstrap_content() -> void:
 	if _content_registry != null and _stats_resolver != null:
@@ -270,6 +395,8 @@ func _create_gladiator(gladiator_class: String) -> Dictionary:
 		"id": "GLAD_%04d" % next_gladiator_index,
 		"nome": gladiator_name,
 		"class": gladiator_class,
+		"level": 1,
+		"experience": 0,
 		"livello": 1,
 		"esperienza": 0,
 		"max_hp": maxi(1, int(base_stats.get("max_hp", 1)) + hp_delta),
@@ -280,6 +407,13 @@ func _create_gladiator(gladiator_class: String) -> Dictionary:
 		"wins": 0,
 		"losses": 0,
 	}
+
+func _apply_level_growth(gladiator: Dictionary, reached_level: int) -> void:
+	gladiator["max_hp"] = maxi(1, int(gladiator.get("max_hp", 1)) + 1)
+	if reached_level == 2 or reached_level == 4:
+		gladiator["atk"] = maxi(1, int(gladiator.get("atk", 1)) + 1)
+	if reached_level == 3 or reached_level == 5:
+		gladiator["def"] = maxi(1, int(gladiator.get("def", 1)) + 1)
 
 func _build_gladiator_name(gladiator_class: String, gladiator_number: int) -> String:
 	var class_label: String = "Retiarius" if gladiator_class == "RET" else "Secutor"
@@ -346,12 +480,6 @@ func _build_match_seed(fighter_a: Dictionary, fighter_b: Dictionary) -> int:
 	var id_b: String = str(fighter_b.get("id", "B"))
 	return int(hash("%s-%s-%d" % [id_a, id_b, day]))
 
-func _injury_days_for_loser(gladiator: Dictionary) -> int:
-	var seed_value: int = int(hash("%s-%d" % [str(gladiator.get("id", "")), day]))
-	var rng: RandomNumberGenerator = RandomNumberGenerator.new()
-	rng.seed = seed_value
-	return rng.randi_range(LOSER_INJURY_DAYS_MIN, LOSER_INJURY_DAYS_MAX)
-
 func _result_has_required_fields(result: Dictionary) -> bool:
 	return result.has("winner_id") and result.has("loser_id") and result.has("turns") and result.has("winner_remaining_hp") and result.has("loser_dead") and result.has("combat_log")
 
@@ -361,9 +489,6 @@ func _find_gladiator_by_id(gladiator_id: String) -> Dictionary:
 			return gladiator
 	return {}
 
-func _level_from_exp(exp_value: int) -> int:
-	return maxi(1, 1 + exp_value / 20)
-
 func _apply_loaded_data(data: Dictionary) -> void:
 	gold = int(data.get("gold", STARTING_GOLD))
 	fame = int(data.get("fame", STARTING_FAME))
@@ -371,6 +496,7 @@ func _apply_loaded_data(data: Dictionary) -> void:
 	next_gladiator_index = int(data.get("next_gladiator_index", 1))
 	roster = _sanitize_roster(data.get("roster", []))
 	battle_history = _sanitize_battle_history(data.get("battle_history", []))
+	recent_events = _sanitize_recent_events(data.get("recent_events", []))
 
 func _sanitize_roster(raw_value: Variant) -> Array[Dictionary]:
 	var sanitized: Array[Dictionary] = []
@@ -381,19 +507,27 @@ func _sanitize_roster(raw_value: Variant) -> Array[Dictionary]:
 		if typeof(item) != TYPE_DICTIONARY:
 			continue
 		var source: Dictionary = item as Dictionary
+		var level_value: int = clampi(int(source.get("level", source.get("livello", 1))), 1, LEVEL_CAP)
+		var experience_value: int = maxi(0, int(source.get("experience", source.get("esperienza", 0))) )
+		var alive_value: bool = bool(source.get("alive", true))
+		var injured_days_value: int = maxi(0, int(source.get("injured_days", 0)))
+		if not alive_value:
+			injured_days_value = 0
 		sanitized.append({
 			"id": str(source.get("id", "")),
 			"nome": str(source.get("nome", "Unknown")),
 			"class": str(source.get("class", "RET")),
-			"livello": int(source.get("livello", 1)),
-			"esperienza": int(source.get("esperienza", 0)),
-			"max_hp": int(source.get("max_hp", 1)),
-			"atk": int(source.get("atk", 1)),
-			"def": int(source.get("def", 1)),
-			"alive": bool(source.get("alive", true)),
-			"injured_days": int(source.get("injured_days", 0)),
-			"wins": int(source.get("wins", 0)),
-			"losses": int(source.get("losses", 0)),
+			"level": level_value,
+			"experience": experience_value,
+			"livello": level_value,
+			"esperienza": experience_value,
+			"max_hp": maxi(1, int(source.get("max_hp", 1))),
+			"atk": maxi(1, int(source.get("atk", 1))),
+			"def": maxi(1, int(source.get("def", 1))),
+			"alive": alive_value,
+			"injured_days": injured_days_value,
+			"wins": maxi(0, int(source.get("wins", 0))),
+			"losses": maxi(0, int(source.get("losses", 0))),
 		})
 	return sanitized
 
@@ -407,9 +541,23 @@ func _sanitize_battle_history(raw_value: Variant) -> Array[Dictionary]:
 			sanitized.append((item as Dictionary).duplicate(true))
 	return sanitized
 
+func _sanitize_recent_events(raw_value: Variant) -> Array[String]:
+	var sanitized: Array[String] = []
+	if typeof(raw_value) != TYPE_ARRAY:
+		return sanitized
+	var raw_array: Array = raw_value as Array
+	for item: Variant in raw_array:
+		sanitized.append(str(item))
+	while sanitized.size() > RECENT_EVENTS_MAX:
+		sanitized.remove_at(0)
+	return sanitized
+
 func _set_game_state(new_state: String) -> void:
 	game_state = new_state
 	game_state_changed.emit(game_state)
 
 func _emit_resources_updated() -> void:
 	resources_updated.emit(gold, fame, day)
+
+func _emit_recent_events_updated() -> void:
+	recent_events_updated.emit(get_recent_events())
