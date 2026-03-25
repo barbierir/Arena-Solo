@@ -61,7 +61,7 @@
       "display_name": "Shield Bash",
       "usable_by": "SECUTOR",
       "target_type": "Enemy",
-      "sta_cost": 4,
+      "sta_cost": 5,
       "accuracy_mod_pct": 0.0,
       "flat_damage": 0,
       "crit_bonus_pct": 0.0,
