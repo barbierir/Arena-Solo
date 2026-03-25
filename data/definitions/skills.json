@@ -63,7 +63,7 @@
       "target_type": "Enemy",
       "sta_cost": 4,
       "accuracy_mod_pct": 0.0,
-      "flat_damage": -1,
+      "flat_damage": 0,
       "crit_bonus_pct": 0.0,
       "self_def_mod": 0,
       "apply_status_id": "STUNNED",
