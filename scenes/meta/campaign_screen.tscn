@@ -291,6 +291,76 @@ scroll_following = true
 unique_name_in_owner = true
 layout_mode = 1
 
+[node name="NarrativeEventOverlay" type="ColorRect" parent="."]
+unique_name_in_owner = true
+visible = false
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+color = Color(0, 0, 0, 0.6)
+
+[node name="CenterContainer" type="CenterContainer" parent="NarrativeEventOverlay"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Panel" type="PanelContainer" parent="NarrativeEventOverlay/CenterContainer"]
+layout_mode = 2
+custom_minimum_size = Vector2(620, 260)
+
+[node name="Margin" type="MarginContainer" parent="NarrativeEventOverlay/CenterContainer/Panel"]
+layout_mode = 2
+theme_override_constants/margin_left = 20
+theme_override_constants/margin_top = 16
+theme_override_constants/margin_right = 20
+theme_override_constants/margin_bottom = 16
+
+[node name="VBox" type="VBoxContainer" parent="NarrativeEventOverlay/CenterContainer/Panel/Margin"]
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="NarrativeTitle" type="Label" parent="NarrativeEventOverlay/CenterContainer/Panel/Margin/VBox"]
+unique_name_in_owner = true
+layout_mode = 2
+horizontal_alignment = 1
+text = "Narrative Event"
+
+[node name="NarrativeDescription" type="Label" parent="NarrativeEventOverlay/CenterContainer/Panel/Margin/VBox"]
+unique_name_in_owner = true
+layout_mode = 2
+autowrap_mode = 2
+text = "Description"
+
+[node name="NarrativeHint" type="Label" parent="NarrativeEventOverlay/CenterContainer/Panel/Margin/VBox"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_colors/font_color = Color(0.84, 0.84, 0.63, 1)
+horizontal_alignment = 1
+text = "Resolve this event to continue the campaign."
+
+[node name="NarrativeChoices" type="HBoxContainer" parent="NarrativeEventOverlay/CenterContainer/Panel/Margin/VBox"]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="NarrativeChoiceAButton" type="Button" parent="NarrativeEventOverlay/CenterContainer/Panel/Margin/VBox/NarrativeChoices"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Choice A"
+
+[node name="NarrativeChoiceBButton" type="Button" parent="NarrativeEventOverlay/CenterContainer/Panel/Margin/VBox/NarrativeChoices"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Choice B"
+
 [node name="EndGameOverlay" type="ColorRect" parent="."]
 unique_name_in_owner = true
 visible = false
@@ -352,4 +422,6 @@ text = "New Game"
 [connection signal="pressed" from="Margin/RootVBox/ActionsPanel/ActionsMargin/Buttons/SaveButton" to="." method="_on_save_pressed"]
 [connection signal="pressed" from="Margin/RootVBox/ActionsPanel/ActionsMargin/Buttons/LoadButton" to="." method="_on_load_pressed"]
 [connection signal="item_selected" from="Margin/RootVBox/ContentRow/RosterPanel/RosterMargin/RosterVBox/RosterList" to="." method="_on_roster_list_item_selected"]
+[connection signal="pressed" from="NarrativeEventOverlay/CenterContainer/Panel/Margin/VBox/NarrativeChoices/NarrativeChoiceAButton" to="." method="_on_narrative_choice_a_pressed"]
+[connection signal="pressed" from="NarrativeEventOverlay/CenterContainer/Panel/Margin/VBox/NarrativeChoices/NarrativeChoiceBButton" to="." method="_on_narrative_choice_b_pressed"]
 [connection signal="pressed" from="EndGameOverlay/CenterContainer/Panel/OverlayMargin/OverlayVBox/OverlayNewGameButton" to="." method="_on_new_game_pressed"]

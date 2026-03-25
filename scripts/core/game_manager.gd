@@ -8,6 +8,7 @@ signal fight_resolved(result: Dictionary)
 signal save_completed(success: bool)
 signal recent_events_updated(events: Array[String])
 signal daily_event_updated(event_data: Dictionary)
+signal narrative_event_updated(event_data: Dictionary)
 
 const SAVE_PATH: String = "user://savegame.json"
 
@@ -57,6 +58,11 @@ const EVENT_HARD_FIGHT_REWARD_MULTIPLIER: float = 1.5
 const EVENT_HARD_FIGHT_RISK_MODIFIER: float = 1.5
 const EVENT_REST_REWARD_MULTIPLIER: float = 0.0
 const EVENT_REST_RISK_MODIFIER: float = 0.0
+const NARRATIVE_EVENT_CHANCE: float = 0.25
+
+const NARRATIVE_EVENT_DOCTOR_VISIT: String = "DOCTOR_VISIT"
+const NARRATIVE_EVENT_CROWD_FAVOR: String = "CROWD_FAVOR"
+const NARRATIVE_EVENT_HARSH_TRAINING: String = "HARSH_TRAINING"
 
 const STATUS_AVAILABLE: String = "AVAILABLE"
 const STATUS_INJURED: String = "INJURED"
@@ -79,6 +85,7 @@ var recent_events: Array[String] = []
 var game_state: String = STATE_RUNNING
 var selected_gladiator_id: String = ""
 var current_event: Dictionary = {}
+var current_narrative_event: Dictionary = {}
 
 var _content_registry: ContentRegistry
 var _stats_resolver: BuildStatsResolver
@@ -97,6 +104,7 @@ func new_game() -> void:
 	battle_history.clear()
 	recent_events.clear()
 	current_event = generate_daily_event()
+	current_narrative_event = {}
 	_set_game_state(STATE_RUNNING)
 	recruit_gladiator("RET")
 	recruit_gladiator("SEC")
@@ -107,6 +115,7 @@ func new_game() -> void:
 	_emit_resources_updated()
 	_emit_recent_events_updated()
 	_emit_daily_event_updated()
+	_emit_narrative_event_updated()
 
 func load_game() -> bool:
 	if not FileAccess.file_exists(SAVE_PATH):
@@ -136,6 +145,7 @@ func load_game() -> bool:
 	_emit_resources_updated()
 	_emit_recent_events_updated()
 	_emit_daily_event_updated()
+	_emit_narrative_event_updated()
 	return true
 
 func save_game() -> bool:
@@ -151,6 +161,7 @@ func save_game() -> bool:
 		"battle_history": battle_history,
 		"recent_events": recent_events,
 		"current_event": current_event,
+		"current_narrative_event": current_narrative_event,
 	}
 	var serialized: String = JSON.stringify(payload, "\t", false)
 	var file: FileAccess = FileAccess.open(SAVE_PATH, FileAccess.WRITE)
@@ -166,8 +177,11 @@ func save_game() -> bool:
 func advance_day() -> void:
 	if not is_campaign_running():
 		return
+	if has_active_narrative_event():
+		return
 	day += 1
 	current_event = generate_daily_event()
+	current_narrative_event = generate_narrative_event()
 	heal_and_update_injuries()
 	if _is_rest_event(current_event):
 		apply_rest_day_recovery_bonus()
@@ -178,6 +192,7 @@ func advance_day() -> void:
 	_emit_resources_updated()
 	_emit_recent_events_updated()
 	_emit_daily_event_updated()
+	_emit_narrative_event_updated()
 
 func get_roster() -> Array[Dictionary]:
 	return roster.duplicate(true)
@@ -244,6 +259,8 @@ func get_surviving_gladiators_count() -> int:
 func recruit_gladiator(gladiator_class: String) -> Dictionary:
 	if not is_campaign_running():
 		return {"error": "Campaign has already ended"}
+	if has_active_narrative_event():
+		return {"error": "Resolve the active narrative event first"}
 	var normalized_class: String = gladiator_class.strip_edges().to_upper()
 	var recruit_cost: int = _recruit_cost_for_class(normalized_class)
 	if recruit_cost <= 0:
@@ -264,9 +281,88 @@ func recruit_gladiator(gladiator_class: String) -> Dictionary:
 func can_start_fight() -> bool:
 	if not is_campaign_running():
 		return false
+	if has_active_narrative_event():
+		return false
 	if _is_rest_event(get_current_event()):
 		return false
 	return get_available_gladiators().size() >= 1
+
+func has_active_narrative_event() -> bool:
+	return not current_narrative_event.is_empty()
+
+func get_current_narrative_event() -> Dictionary:
+	if not has_active_narrative_event():
+		return {}
+	return _sanitize_narrative_event(current_narrative_event)
+
+func generate_narrative_event() -> Dictionary:
+	var rng: RandomNumberGenerator = RandomNumberGenerator.new()
+	rng.seed = int(hash("narrative-event-%d-%d-%d" % [day, next_gladiator_index, roster.size()]))
+	if rng.randf() >= NARRATIVE_EVENT_CHANCE:
+		return {}
+	var event_roll: int = rng.randi_range(0, 2)
+	if event_roll == 0:
+		return _build_doctor_visit_event()
+	if event_roll == 1:
+		return _build_crowd_favor_event()
+	return _build_harsh_training_event()
+
+func can_resolve_narrative_choice(choice_id: String) -> bool:
+	if not has_active_narrative_event():
+		return false
+	var normalized_choice: String = choice_id.strip_edges()
+	if normalized_choice == "":
+		return false
+	var event_id: String = str(current_narrative_event.get("id", ""))
+	if event_id == NARRATIVE_EVENT_DOCTOR_VISIT and normalized_choice == "PAY":
+		return gold >= 10
+	if event_id == NARRATIVE_EVENT_CROWD_FAVOR and normalized_choice == "EXHIBITION":
+		return gold >= 5
+	return _choice_exists(current_narrative_event, normalized_choice)
+
+func resolve_narrative_event(choice_id: String) -> void:
+	if not has_active_narrative_event():
+		add_recent_event("No active narrative event to resolve.")
+		_emit_recent_events_updated()
+		return
+	var event_data: Dictionary = _sanitize_narrative_event(current_narrative_event)
+	var event_id: String = str(event_data.get("id", ""))
+	var normalized_choice: String = choice_id.strip_edges()
+	if not _choice_exists(event_data, normalized_choice):
+		add_recent_event("Invalid narrative choice for %s." % event_id)
+		_emit_recent_events_updated()
+		return
+
+	var result_message: String = ""
+	var resolution_completed: bool = true
+	if event_id == NARRATIVE_EVENT_DOCTOR_VISIT:
+		result_message = _resolve_doctor_visit_choice(normalized_choice)
+		if result_message == "":
+			resolution_completed = false
+	elif event_id == NARRATIVE_EVENT_CROWD_FAVOR:
+		result_message = _resolve_crowd_favor_choice(normalized_choice)
+		if result_message == "":
+			resolution_completed = false
+	elif event_id == NARRATIVE_EVENT_HARSH_TRAINING:
+		result_message = _resolve_harsh_training_choice(normalized_choice)
+	else:
+		result_message = "The moment passes without consequence."
+
+	if not resolution_completed:
+		add_recent_event("Choice unavailable: requirements not met.")
+		save_game()
+		_emit_resources_updated()
+		_emit_recent_events_updated()
+		_emit_narrative_event_updated()
+		return
+
+	add_recent_event("%s — %s" % [str(event_data.get("title", "Narrative Event")), result_message])
+	current_narrative_event = {}
+	save_game()
+	roster_updated.emit()
+	_emit_resources_updated()
+	_emit_recent_events_updated()
+	_emit_narrative_event_updated()
 
 func generate_daily_event() -> Dictionary:
 	var rng: RandomNumberGenerator = RandomNumberGenerator.new()
@@ -295,6 +391,8 @@ func get_current_event() -> Dictionary:
 func start_next_fight() -> Dictionary:
 	if not is_campaign_running():
 		return {"error": "Campaign has already ended"}
+	if has_active_narrative_event():
+		return {"error": "Resolve the active narrative event first"}
 	var today_event: Dictionary = get_current_event()
 	if _is_rest_event(today_event):
 		return {"error": "The arena is closed today. Your gladiators recover."}
@@ -738,6 +836,7 @@ func _apply_loaded_data(data: Dictionary) -> void:
 	battle_history = _sanitize_battle_history(data.get("battle_history", []))
 	recent_events = _sanitize_recent_events(data.get("recent_events", []))
 	current_event = _sanitize_event(data.get("current_event", {}))
+	current_narrative_event = _sanitize_narrative_event(data.get("current_narrative_event", {}))
 	game_state = _sanitize_game_state(data.get("game_state", STATE_RUNNING))
 	if current_event.is_empty():
 		current_event = generate_daily_event()
@@ -851,6 +950,148 @@ func _sanitize_event(raw_event: Variant) -> Dictionary:
 		"risk_modifier": _sanitize_multiplier(source.get("risk_modifier", fallback.get("risk_modifier", 1.0)), float(fallback.get("risk_modifier", 1.0))),
 	}
 
+func _build_doctor_visit_event() -> Dictionary:
+	return {
+		"id": NARRATIVE_EVENT_DOCTOR_VISIT,
+		"title": "A Physician Offers His Services",
+		"description": "A physician asks for coin to improve treatment for your injured gladiators.",
+		"choices": [
+			{"id": "PAY", "text": "Pay 10 gold"},
+			{"id": "REFUSE", "text": "Refuse"},
+		],
+	}
+
+func _build_crowd_favor_event() -> Dictionary:
+	return {
+		"id": NARRATIVE_EVENT_CROWD_FAVOR,
+		"title": "The Crowd Hungers for Spectacle",
+		"description": "The crowd wants a flashy demonstration before the next official bout.",
+		"choices": [
+			{"id": "EXHIBITION", "text": "Stage a flashy exhibition (5 gold)"},
+			{"id": "SAVE", "text": "Save your money"},
+		],
+	}
+
+func _build_harsh_training_event() -> Dictionary:
+	return {
+		"id": NARRATIVE_EVENT_HARSH_TRAINING,
+		"title": "A Brutal Training Regimen",
+		"description": "Your trainers propose a punishing routine to force rapid improvement.",
+		"choices": [
+			{"id": "PUSH", "text": "Push the men harder"},
+			{"id": "NORMAL", "text": "Keep training normal"},
+		],
+	}
+
+func _sanitize_narrative_event(raw_event: Variant) -> Dictionary:
+	if typeof(raw_event) != TYPE_DICTIONARY:
+		return {}
+	var source: Dictionary = raw_event as Dictionary
+	var event_id: String = str(source.get("id", "")).strip_edges()
+	var fallback: Dictionary = {}
+	if event_id == NARRATIVE_EVENT_DOCTOR_VISIT:
+		fallback = _build_doctor_visit_event()
+	elif event_id == NARRATIVE_EVENT_CROWD_FAVOR:
+		fallback = _build_crowd_favor_event()
+	elif event_id == NARRATIVE_EVENT_HARSH_TRAINING:
+		fallback = _build_harsh_training_event()
+	else:
+		return {}
+	var raw_choices: Variant = source.get("choices", fallback.get("choices", []))
+	if typeof(raw_choices) != TYPE_ARRAY:
+		raw_choices = fallback.get("choices", [])
+	var choices: Array[Dictionary] = []
+	for item: Variant in raw_choices:
+		if typeof(item) != TYPE_DICTIONARY:
+			continue
+		var choice: Dictionary = item as Dictionary
+		var choice_id: String = str(choice.get("id", "")).strip_edges()
+		var choice_text: String = str(choice.get("text", "")).strip_edges()
+		if choice_id == "" or choice_text == "":
+			continue
+		choices.append({"id": choice_id, "text": choice_text})
+	if choices.is_empty():
+		var fallback_choices_raw: Variant = fallback.get("choices", [])
+		if typeof(fallback_choices_raw) == TYPE_ARRAY:
+			var fallback_choices: Array = fallback_choices_raw as Array
+			for item: Variant in fallback_choices:
+				if typeof(item) != TYPE_DICTIONARY:
+					continue
+				choices.append((item as Dictionary).duplicate(true))
+	return {
+		"id": event_id,
+		"title": str(source.get("title", str(fallback.get("title", "Narrative Event")))),
+		"description": str(source.get("description", str(fallback.get("description", "")))),
+		"choices": choices,
+	}
+
+func _choice_exists(event_data: Dictionary, choice_id: String) -> bool:
+	var choices: Variant = event_data.get("choices", [])
+	if typeof(choices) != TYPE_ARRAY:
+		return false
+	for item: Variant in choices:
+		if typeof(item) != TYPE_DICTIONARY:
+			continue
+		var choice: Dictionary = item as Dictionary
+		if str(choice.get("id", "")) == choice_id:
+			return true
+	return false
+
+func _resolve_doctor_visit_choice(choice_id: String) -> String:
+	if choice_id == "REFUSE":
+		return "You decline the physician's offer."
+	if choice_id != "PAY":
+		return "Nothing changes."
+	if gold < 10:
+		return ""
+	gold -= 10
+	var recovered_count: int = 0
+	for gladiator: Dictionary in roster:
+		if not bool(gladiator.get("alive", true)):
+			continue
+		var injury_days: int = maxi(0, int(gladiator.get("injured_days", 0)))
+		if injury_days <= 0:
+			continue
+		gladiator["injured_days"] = maxi(0, injury_days - 1)
+		recovered_count += 1
+	return "You pay the physician. %d injured gladiators recover faster." % recovered_count
+
+func _resolve_crowd_favor_choice(choice_id: String) -> String:
+	if choice_id == "SAVE":
+		return "You keep your purse closed and avoid extra expense."
+	if choice_id != "EXHIBITION":
+		return "Nothing changes."
+	if gold < 5:
+		return ""
+	gold -= 5
+	fame += 3
+	return "The exhibition thrills the crowd: +3 fame."
+
+func _resolve_harsh_training_choice(choice_id: String) -> String:
+	if choice_id == "NORMAL":
+		return "You keep training steady and avoid unnecessary risk."
+	if choice_id != "PUSH":
+		return "Nothing changes."
+	var candidates: Array[Dictionary] = []
+	for gladiator: Dictionary in roster:
+		if get_gladiator_status(gladiator) == STATUS_AVAILABLE:
+			candidates.append(gladiator)
+	if candidates.is_empty():
+		return "No gladiator was fit for brutal training."
+	var rng: RandomNumberGenerator = RandomNumberGenerator.new()
+	rng.seed = int(hash("harsh-training-%d-%d-%d" % [day, roster.size(), next_enemy_index]))
+	var selected_index: int = rng.randi_range(0, candidates.size() - 1)
+	var target: Dictionary = candidates[selected_index]
+	grant_experience(str(target.get("id", "")), 3)
+	var injury_applied: bool = false
+	if rng.randf() < 0.25:
+		target["injured_days"] = maxi(1, int(target.get("injured_days", 0)) + 1)
+		injury_applied = true
+	return "%s gains +3 XP%s." % [
+		get_gladiator_display_name(target),
+		" but suffers 1 day of injury" if injury_applied else "",
+	]
+
 func _sanitize_multiplier(value: Variant, fallback: float) -> float:
 	var parsed: float = float(value)
 	if is_nan(parsed) or is_inf(parsed) or parsed < 0.0:
@@ -896,3 +1137,6 @@ func _emit_recent_events_updated() -> void:
 
 func _emit_daily_event_updated() -> void:
 	daily_event_updated.emit(get_current_event())
+
+func _emit_narrative_event_updated() -> void:
+	narrative_event_updated.emit(get_current_narrative_event())

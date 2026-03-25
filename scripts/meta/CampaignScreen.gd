@@ -27,11 +27,18 @@ const COMBAT_ADAPTER_SCRIPT: GDScript = preload("res://scripts/combat/bridge/Cam
 @onready var _end_game_overlay: Control = %EndGameOverlay
 @onready var _end_game_title: Label = %EndGameTitle
 @onready var _end_game_stats: Label = %EndGameStats
+@onready var _narrative_overlay: Control = %NarrativeEventOverlay
+@onready var _narrative_title: Label = %NarrativeTitle
+@onready var _narrative_description: Label = %NarrativeDescription
+@onready var _narrative_choice_a_button: Button = %NarrativeChoiceAButton
+@onready var _narrative_choice_b_button: Button = %NarrativeChoiceBButton
+@onready var _narrative_hint: Label = %NarrativeHint
 
 var _combat_adapter: CampaignCombatAdapter
 var _is_fight_flow_active: bool = false
 var _campaign_controls_enabled: bool = true
 var _roster_ids_by_index: Array[String] = []
+var _narrative_choice_ids: Array[String] = []
 
 func _ready() -> void:
 	_combat_adapter = COMBAT_ADAPTER_SCRIPT.new()
@@ -44,6 +51,7 @@ func _ready() -> void:
 	GameManager.fight_resolved.connect(_on_fight_resolved)
 	GameManager.recent_events_updated.connect(_on_recent_events_updated)
 	GameManager.daily_event_updated.connect(_on_daily_event_updated)
+	GameManager.narrative_event_updated.connect(_on_narrative_event_updated)
 	if not GameManager.load_game():
 		GameManager.new_game()
 	_refresh_all()
@@ -54,7 +62,7 @@ func _on_new_game_pressed() -> void:
 	_refresh_recent_events()
 
 func _on_recruit_ret_pressed() -> void:
-	if not GameManager.is_campaign_running():
+	if not _can_use_campaign_actions():
 		return
 	var result: Dictionary = GameManager.recruit_gladiator("RET")
 	if result.has("error"):
@@ -63,7 +71,7 @@ func _on_recruit_ret_pressed() -> void:
 		return
 
 func _on_recruit_sec_pressed() -> void:
-	if not GameManager.is_campaign_running():
+	if not _can_use_campaign_actions():
 		return
 	var result: Dictionary = GameManager.recruit_gladiator("SEC")
 	if result.has("error"):
@@ -72,7 +80,7 @@ func _on_recruit_sec_pressed() -> void:
 		return
 
 func _on_advance_day_pressed() -> void:
-	if not GameManager.is_campaign_running():
+	if not _can_use_campaign_actions():
 		return
 	GameManager.advance_day()
 	GameManager.add_recent_event("Giorno avanzato.")
@@ -81,7 +89,7 @@ func _on_advance_day_pressed() -> void:
 func _on_start_fight_pressed() -> void:
 	if _is_fight_flow_active:
 		return
-	if not GameManager.is_campaign_running():
+	if not _can_use_campaign_actions():
 		return
 	var payload: Dictionary = GameManager.start_next_fight()
 	if payload.has("error"):
@@ -137,6 +145,10 @@ func _on_recent_events_updated(_events: Array[String]) -> void:
 func _on_daily_event_updated(_event_data: Dictionary) -> void:
 	_refresh_today_event()
 	_refresh_start_fight_button_state()
+
+func _on_narrative_event_updated(_event_data: Dictionary) -> void:
+	_refresh_narrative_overlay()
+	_refresh_campaign_actions_state()
 
 func _on_fight_started(payload: Dictionary) -> void:
 	_set_campaign_controls_enabled(false)
@@ -204,6 +216,8 @@ func _refresh_all() -> void:
 	_refresh_recent_events()
 	_refresh_campaign_end_overlay()
 	_refresh_today_event()
+	_refresh_narrative_overlay()
+	_refresh_campaign_actions_state()
 	if not _is_fight_flow_active:
 		_refresh_start_fight_button_state()
 
@@ -250,10 +264,16 @@ func _refresh_recent_events() -> void:
 
 func _set_campaign_controls_enabled(enabled: bool) -> void:
 	_campaign_controls_enabled = enabled
+	_refresh_campaign_actions_state()
+	_refresh_campaign_end_overlay()
+	_refresh_start_fight_button_state()
+
+func _refresh_campaign_actions_state() -> void:
 	var campaign_running: bool = GameManager.is_campaign_running()
-	var controls_enabled: bool = enabled and campaign_running
+	var narrative_blocked: bool = GameManager.has_active_narrative_event()
+	var controls_enabled: bool = _campaign_controls_enabled and campaign_running and not narrative_blocked
 	var can_fight_now: bool = controls_enabled and GameManager.can_start_fight()
-	_new_game_button.disabled = not enabled
+	_new_game_button.disabled = not _campaign_controls_enabled
 	_recruit_ret_button.disabled = not controls_enabled
 	_recruit_sec_button.disabled = not controls_enabled
 	_advance_day_button.disabled = not controls_enabled
@@ -262,15 +282,61 @@ func _set_campaign_controls_enabled(enabled: bool) -> void:
 	_load_button.disabled = not controls_enabled
 	_roster_list.select_mode = ItemList.SELECT_SINGLE
 	_roster_list.mouse_filter = Control.MOUSE_FILTER_STOP if controls_enabled else Control.MOUSE_FILTER_IGNORE
-	_refresh_campaign_end_overlay()
-	_refresh_start_fight_button_state()
 
 func _refresh_start_fight_button_state() -> void:
 	var event_data: Dictionary = GameManager.get_current_event()
 	var is_rest_day: bool = str(event_data.get("type", "FIGHT")) == GameManager.EVENT_TYPE_REST
-	var can_fight_now: bool = _campaign_controls_enabled and GameManager.is_campaign_running() and GameManager.can_start_fight() and not _is_fight_flow_active
+	var can_fight_now: bool = _campaign_controls_enabled and GameManager.is_campaign_running() and not GameManager.has_active_narrative_event() and GameManager.can_start_fight() and not _is_fight_flow_active
 	_start_fight_button.disabled = not can_fight_now
 	_start_fight_button.text = "No Fights Today" if is_rest_day else "Enter Arena"
+
+func _refresh_narrative_overlay() -> void:
+	var event_data: Dictionary = GameManager.get_current_narrative_event()
+	_narrative_choice_ids.clear()
+	if event_data.is_empty():
+		_narrative_overlay.visible = false
+		return
+	_narrative_overlay.visible = true
+	_narrative_title.text = str(event_data.get("title", "Narrative Event"))
+	_narrative_description.text = str(event_data.get("description", ""))
+	_narrative_hint.text = "Resolve this event to continue the campaign."
+	var choices: Variant = event_data.get("choices", [])
+	var first_choice: Dictionary = {}
+	var second_choice: Dictionary = {}
+	if typeof(choices) == TYPE_ARRAY:
+		var choice_array: Array = choices as Array
+		if choice_array.size() > 0 and typeof(choice_array[0]) == TYPE_DICTIONARY:
+			first_choice = choice_array[0] as Dictionary
+		if choice_array.size() > 1 and typeof(choice_array[1]) == TYPE_DICTIONARY:
+			second_choice = choice_array[1] as Dictionary
+	_configure_narrative_choice_button(_narrative_choice_a_button, first_choice)
+	_configure_narrative_choice_button(_narrative_choice_b_button, second_choice)
+
+func _configure_narrative_choice_button(button: Button, choice_data: Dictionary) -> void:
+	if choice_data.is_empty():
+		button.visible = false
+		button.disabled = true
+		return
+	button.visible = true
+	var choice_id: String = str(choice_data.get("id", "")).strip_edges()
+	button.text = str(choice_data.get("text", "Choice"))
+	button.disabled = not GameManager.can_resolve_narrative_choice(choice_id)
+	_narrative_choice_ids.append(choice_id)
+
+func _on_narrative_choice_a_pressed() -> void:
+	_resolve_narrative_choice_at(0)
+
+func _on_narrative_choice_b_pressed() -> void:
+	_resolve_narrative_choice_at(1)
+
+func _resolve_narrative_choice_at(index: int) -> void:
+	if index < 0 or index >= _narrative_choice_ids.size():
+		return
+	var choice_id: String = _narrative_choice_ids[index]
+	GameManager.resolve_narrative_event(choice_id)
+
+func _can_use_campaign_actions() -> bool:
+	return GameManager.is_campaign_running() and not GameManager.has_active_narrative_event()
 
 func _refresh_today_event() -> void:
 	var event_data: Dictionary = GameManager.get_current_event()
