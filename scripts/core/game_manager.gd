@@ -48,10 +48,12 @@ var gold: int = STARTING_GOLD
 var fame: int = STARTING_FAME
 var day: int = STARTING_DAY
 var next_gladiator_index: int = 1
+var next_enemy_index: int = 1
 var roster: Array[Dictionary] = []
 var battle_history: Array[Dictionary] = []
 var recent_events: Array[String] = []
 var game_state: String = STATE_IDLE
+var selected_gladiator_id: String = ""
 
 var _content_registry: ContentRegistry
 var _stats_resolver: BuildStatsResolver
@@ -64,6 +66,8 @@ func new_game() -> void:
 	fame = STARTING_FAME
 	day = STARTING_DAY
 	next_gladiator_index = 1
+	next_enemy_index = 1
+	selected_gladiator_id = ""
 	roster.clear()
 	battle_history.clear()
 	recent_events.clear()
@@ -111,7 +115,9 @@ func save_game() -> bool:
 		"fame": fame,
 		"day": day,
 		"next_gladiator_index": next_gladiator_index,
+		"next_enemy_index": next_enemy_index,
 		"game_state": game_state,
+		"selected_gladiator_id": selected_gladiator_id,
 		"roster": roster,
 		"battle_history": battle_history,
 		"recent_events": recent_events,
@@ -149,6 +155,45 @@ func get_available_gladiators() -> Array[Dictionary]:
 			available.append(gladiator.duplicate(true))
 	return available
 
+func set_selected_gladiator(gladiator_id: String) -> bool:
+	var normalized_id: String = gladiator_id.strip_edges()
+	if normalized_id == "":
+		selected_gladiator_id = ""
+		return true
+	var fighter: Dictionary = _find_gladiator_by_id(normalized_id)
+	if fighter.is_empty():
+		return false
+	if get_gladiator_status(fighter) != STATUS_AVAILABLE:
+		return false
+	selected_gladiator_id = normalized_id
+	return true
+
+func get_selected_gladiator() -> Dictionary:
+	if selected_gladiator_id == "":
+		return {}
+	var fighter: Dictionary = _find_gladiator_by_id(selected_gladiator_id)
+	if fighter.is_empty():
+		selected_gladiator_id = ""
+		return {}
+	if get_gladiator_status(fighter) != STATUS_AVAILABLE:
+		selected_gladiator_id = ""
+		return {}
+	return fighter.duplicate(true)
+
+func get_selected_gladiator_id() -> String:
+	if get_selected_gladiator().is_empty():
+		return ""
+	return selected_gladiator_id
+
+func has_living_gladiators() -> bool:
+	for gladiator: Dictionary in roster:
+		if bool(gladiator.get("alive", false)):
+			return true
+	return false
+
+func is_game_over() -> bool:
+	return not has_living_gladiators()
+
 func recruit_gladiator(gladiator_class: String) -> Dictionary:
 	var normalized_class: String = gladiator_class.strip_edges().to_upper()
 	var recruit_cost: int = _recruit_cost_for_class(normalized_class)
@@ -168,30 +213,68 @@ func recruit_gladiator(gladiator_class: String) -> Dictionary:
 	return gladiator.duplicate(true)
 
 func can_start_fight() -> bool:
-	return get_available_gladiators().size() >= 2
+	return get_available_gladiators().size() >= 1
 
 func start_next_fight() -> Dictionary:
 	if not can_start_fight():
-		return {"error": "Not enough available gladiators"}
+		return {"error": "No available gladiators"}
 
-	var pair: Array[Dictionary] = _select_match_pair()
-	if pair.size() < 2:
-		return {"error": "No valid match pair found"}
+	var player_fighter: Dictionary = get_selected_gladiator()
+	if player_fighter.is_empty():
+		var available: Array[Dictionary] = get_available_gladiators()
+		if available.is_empty():
+			return {"error": "No valid player gladiator found"}
+		player_fighter = available[0]
+		selected_gladiator_id = str(player_fighter.get("id", ""))
+	var enemy_fighter: Dictionary = generate_enemy_for(player_fighter)
+	if enemy_fighter.is_empty():
+		return {"error": "Enemy generation failed"}
 
-	var fighter_a: Dictionary = pair[0]
-	var fighter_b: Dictionary = pair[1]
 	_set_game_state(STATE_PREPARING_FIGHT)
 	var payload: Dictionary = {
 		"day": day,
-		"seed": _build_match_seed(fighter_a, fighter_b),
-		"fighter_a": fighter_a,
-		"fighter_b": fighter_b,
-		"attacker_build_id": _build_id_for_class(str(fighter_a.get("class", ""))),
-		"defender_build_id": _build_id_for_class(str(fighter_b.get("class", ""))),
+		"seed": _build_match_seed(player_fighter, enemy_fighter),
+		"fighter_a": player_fighter,
+		"fighter_b": enemy_fighter,
+		"player_gladiator_id": str(player_fighter.get("id", "")),
+		"enemy_gladiator_id": str(enemy_fighter.get("id", "")),
+		"attacker_build_id": _build_id_for_class(str(player_fighter.get("class", ""))),
+		"defender_build_id": _build_id_for_class(str(enemy_fighter.get("class", ""))),
 	}
 	fight_started.emit(payload)
 	_set_game_state(STATE_IN_FIGHT)
 	return payload
+
+func generate_enemy_for(player_gladiator: Dictionary) -> Dictionary:
+	_bootstrap_content()
+	if player_gladiator.is_empty():
+		return {}
+	var player_level: int = clampi(int(player_gladiator.get("level", player_gladiator.get("livello", 1))), 1, LEVEL_CAP)
+	var rng: RandomNumberGenerator = RandomNumberGenerator.new()
+	rng.seed = int(hash("%s-%d-%d" % [str(player_gladiator.get("id", "")), day, next_enemy_index]))
+	var enemy_class: String = "RET" if rng.randi_range(0, 1) == 0 else "SEC"
+	var level_delta: int = rng.randi_range(-1, 1)
+	var enemy_level: int = clampi(player_level + level_delta, 1, LEVEL_CAP)
+	var base_stats: Dictionary = _stats_resolver.resolve_build_stats(_build_id_for_class(enemy_class))
+	var enemy: Dictionary = {
+		"id": "enemy_%04d" % next_enemy_index,
+		"nome": _build_enemy_name(enemy_class, next_enemy_index),
+		"class": enemy_class,
+		"level": enemy_level,
+		"experience": 0,
+		"livello": enemy_level,
+		"esperienza": 0,
+		"max_hp": maxi(1, int(base_stats.get("max_hp", 1))),
+		"atk": maxi(1, int(base_stats.get("atk", 1))),
+		"def": maxi(1, int(base_stats.get("def", 1))),
+		"alive": true,
+		"injured_days": 0,
+		"is_enemy": true,
+	}
+	for reached_level: int in range(2, enemy_level + 1):
+		_apply_level_growth(enemy, reached_level)
+	next_enemy_index += 1
+	return enemy
 
 func abort_active_fight(reason: String = "") -> void:
 	if game_state == STATE_IDLE:
@@ -251,25 +334,28 @@ func resolve_fight(result: Dictionary) -> void:
 
 func award_post_fight_rewards(winner_id: String, loser_id: String, result: Dictionary) -> Dictionary:
 	gold += REWARD_GOLD_PER_FIGHT
-	fame += REWARD_FAME_PER_WIN
+	if not _find_gladiator_by_id(winner_id).is_empty():
+		fame += REWARD_FAME_PER_WIN
 
 	var progression_summary: Dictionary = {}
-	progression_summary[winner_id] = {
-		"xp_gained": REWARD_EXP_WINNER,
-		"events": grant_experience(winner_id, REWARD_EXP_WINNER),
-	}
+	if not _find_gladiator_by_id(winner_id).is_empty():
+		progression_summary[winner_id] = {
+			"xp_gained": REWARD_EXP_WINNER,
+			"events": grant_experience(winner_id, REWARD_EXP_WINNER),
+		}
 
 	var loser_dead: bool = bool(result.get("loser_dead", false))
-	if loser_dead:
-		progression_summary[loser_id] = {
-			"xp_gained": 0,
-			"events": [],
-		}
-	else:
-		progression_summary[loser_id] = {
-			"xp_gained": REWARD_EXP_SURVIVOR_LOSER,
-			"events": grant_experience(loser_id, REWARD_EXP_SURVIVOR_LOSER),
-		}
+	if not _find_gladiator_by_id(loser_id).is_empty():
+		if loser_dead:
+			progression_summary[loser_id] = {
+				"xp_gained": 0,
+				"events": [],
+			}
+		else:
+			progression_summary[loser_id] = {
+				"xp_gained": REWARD_EXP_SURVIVOR_LOSER,
+				"events": grant_experience(loser_id, REWARD_EXP_SURVIVOR_LOSER),
+			}
 
 	return {
 		"gold": REWARD_GOLD_PER_FIGHT,
@@ -419,6 +505,10 @@ func _build_gladiator_name(gladiator_class: String, gladiator_number: int) -> St
 	var class_label: String = "Retiarius" if gladiator_class == "RET" else "Secutor"
 	return "%s %s" % [class_label, _to_roman(gladiator_number)]
 
+func _build_enemy_name(gladiator_class: String, enemy_number: int) -> String:
+	var class_label: String = "Retiarius" if gladiator_class == "RET" else "Secutor"
+	return "Arena %s %s" % [class_label, _to_roman(enemy_number)]
+
 func _to_roman(value: int) -> String:
 	var numerals: Array[Dictionary] = [
 		{"value": 1000, "symbol": "M"},
@@ -459,22 +549,6 @@ func _build_id_for_class(gladiator_class: String) -> String:
 		return SEC_BUILD_ID
 	return RET_BUILD_ID
 
-func _select_match_pair() -> Array[Dictionary]:
-	var available: Array[Dictionary] = get_available_gladiators()
-	if available.size() < 2:
-		return []
-	var ret_fighter: Dictionary = {}
-	var sec_fighter: Dictionary = {}
-	for fighter: Dictionary in available:
-		var fighter_class: String = str(fighter.get("class", ""))
-		if ret_fighter.is_empty() and fighter_class == "RET":
-			ret_fighter = fighter
-		elif sec_fighter.is_empty() and fighter_class == "SEC":
-			sec_fighter = fighter
-	if not ret_fighter.is_empty() and not sec_fighter.is_empty():
-		return [ret_fighter, sec_fighter]
-	return [available[0], available[1]]
-
 func _build_match_seed(fighter_a: Dictionary, fighter_b: Dictionary) -> int:
 	var id_a: String = str(fighter_a.get("id", "A"))
 	var id_b: String = str(fighter_b.get("id", "B"))
@@ -494,7 +568,15 @@ func _apply_loaded_data(data: Dictionary) -> void:
 	fame = int(data.get("fame", STARTING_FAME))
 	day = int(data.get("day", STARTING_DAY))
 	next_gladiator_index = int(data.get("next_gladiator_index", 1))
+	next_enemy_index = int(data.get("next_enemy_index", 1))
+	selected_gladiator_id = str(data.get("selected_gladiator_id", ""))
 	roster = _sanitize_roster(data.get("roster", []))
+	if not _find_gladiator_by_id(selected_gladiator_id).is_empty():
+		var selected: Dictionary = _find_gladiator_by_id(selected_gladiator_id)
+		if get_gladiator_status(selected) != STATUS_AVAILABLE:
+			selected_gladiator_id = ""
+	else:
+		selected_gladiator_id = ""
 	battle_history = _sanitize_battle_history(data.get("battle_history", []))
 	recent_events = _sanitize_recent_events(data.get("recent_events", []))
 
