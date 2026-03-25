@@ -23,6 +23,7 @@ const COMBAT_ADAPTER_SCRIPT: GDScript = preload("res://scripts/combat/bridge/Cam
 
 var _combat_adapter: CampaignCombatAdapter
 var _is_fight_flow_active: bool = false
+var _campaign_controls_enabled: bool = true
 var _roster_ids_by_index: Array[String] = []
 
 func _ready() -> void:
@@ -72,6 +73,8 @@ func _on_start_fight_pressed() -> void:
 		_refresh_recent_events()
 
 func _on_roster_list_item_selected(index: int) -> void:
+	if not _campaign_controls_enabled:
+		return
 	if index < 0 or index >= _roster_ids_by_index.size():
 		return
 	var gladiator_id: String = _roster_ids_by_index[index]
@@ -210,6 +213,7 @@ func _refresh_recent_events() -> void:
 		_event_log.append_text("%s\n" % event_text)
 
 func _set_campaign_controls_enabled(enabled: bool) -> void:
+	_campaign_controls_enabled = enabled
 	var is_game_over: bool = GameManager.is_game_over()
 	var can_fight_now: bool = enabled and GameManager.can_start_fight() and not is_game_over
 	_new_game_button.disabled = not enabled
@@ -220,7 +224,7 @@ func _set_campaign_controls_enabled(enabled: bool) -> void:
 	_save_button.disabled = not enabled
 	_load_button.disabled = not enabled
 	_roster_list.select_mode = ItemList.SELECT_SINGLE
-	_roster_list.disabled = not enabled
+	_roster_list.mouse_filter = Control.MOUSE_FILTER_STOP if enabled else Control.MOUSE_FILTER_IGNORE
 	_refresh_game_over_state()
 
 func _refresh_selected_fighter() -> void:

@@ -22,8 +22,8 @@ func run_payload(payload: Dictionary) -> Dictionary:
 	if attacker_id == "" or defender_id == "":
 		return {"error": "Missing build ids in payload"}
 
-	var seed: int = int(payload.get("seed", 1))
-	var rng_service: SeededRngService = RNG_SERVICE_SCRIPT.new(seed)
+	var fight_seed: int = int(payload.get("seed", 1))
+	var rng_service: SeededRngService = RNG_SERVICE_SCRIPT.new(fight_seed)
 	var simulation: CombatSimulation = COMBAT_SIMULATION_SCRIPT.new()
 	simulation.configure(_content_registry, rng_service)
 	simulation.initialize_fight(attacker_id, defender_id)
