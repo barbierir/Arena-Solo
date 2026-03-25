@@ -1,5 +1,4 @@
 extends Node
-class_name GameManager
 
 signal game_state_changed(new_state: String)
 signal roster_updated()
