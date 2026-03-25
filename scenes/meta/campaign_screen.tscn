@@ -1,0 +1,126 @@
+[gd_scene load_steps=2 format=3 uid="uid://campaignscreen"]
+
+[ext_resource type="Script" path="res://scripts/meta/CampaignScreen.gd" id="1_1"]
+
+[node name="CampaignScreen" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_1")
+
+[node name="Margin" type="MarginContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/margin_left = 12
+theme_override_constants/margin_top = 12
+theme_override_constants/margin_right = 12
+theme_override_constants/margin_bottom = 12
+
+[node name="RootVBox" type="VBoxContainer" parent="Margin"]
+layout_mode = 2
+
+[node name="Header" type="HBoxContainer" parent="Margin/RootVBox"]
+layout_mode = 2
+
+[node name="GoldLabel" type="Label" parent="Margin/RootVBox/Header"]
+layout_mode = 2
+text = "Gold:"
+
+[node name="GoldValue" type="Label" parent="Margin/RootVBox/Header"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "0"
+
+[node name="FameLabel" type="Label" parent="Margin/RootVBox/Header"]
+layout_mode = 2
+text = "   Fame:"
+
+[node name="FameValue" type="Label" parent="Margin/RootVBox/Header"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "0"
+
+[node name="DayLabel" type="Label" parent="Margin/RootVBox/Header"]
+layout_mode = 2
+text = "   Day:"
+
+[node name="DayValue" type="Label" parent="Margin/RootVBox/Header"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "1"
+
+[node name="StateLabel" type="Label" parent="Margin/RootVBox/Header"]
+layout_mode = 2
+text = "   State:"
+
+[node name="StateValue" type="Label" parent="Margin/RootVBox/Header"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "idle"
+
+[node name="Buttons" type="HBoxContainer" parent="Margin/RootVBox"]
+layout_mode = 2
+
+[node name="NewGameButton" type="Button" parent="Margin/RootVBox/Buttons"]
+layout_mode = 2
+text = "New Game"
+
+[node name="RecruitRetButton" type="Button" parent="Margin/RootVBox/Buttons"]
+layout_mode = 2
+text = "Recruit RET"
+
+[node name="RecruitSecButton" type="Button" parent="Margin/RootVBox/Buttons"]
+layout_mode = 2
+text = "Recruit SEC"
+
+[node name="AdvanceDayButton" type="Button" parent="Margin/RootVBox/Buttons"]
+layout_mode = 2
+text = "Advance Day"
+
+[node name="StartFightButton" type="Button" parent="Margin/RootVBox/Buttons"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Start Fight"
+
+[node name="SaveButton" type="Button" parent="Margin/RootVBox/Buttons"]
+layout_mode = 2
+text = "Save"
+
+[node name="LoadButton" type="Button" parent="Margin/RootVBox/Buttons"]
+layout_mode = 2
+text = "Load"
+
+[node name="RosterTitle" type="Label" parent="Margin/RootVBox"]
+layout_mode = 2
+text = "Roster"
+
+[node name="RosterList" type="ItemList" parent="Margin/RootVBox"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 220)
+layout_mode = 2
+
+[node name="EventLogTitle" type="Label" parent="Margin/RootVBox"]
+layout_mode = 2
+text = "Event Log"
+
+[node name="EventLog" type="RichTextLabel" parent="Margin/RootVBox"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 180)
+layout_mode = 2
+bbcode_enabled = false
+scroll_following = true
+
+[connection signal="pressed" from="Margin/RootVBox/Buttons/NewGameButton" to="." method="_on_new_game_pressed"]
+[connection signal="pressed" from="Margin/RootVBox/Buttons/RecruitRetButton" to="." method="_on_recruit_ret_pressed"]
+[connection signal="pressed" from="Margin/RootVBox/Buttons/RecruitSecButton" to="." method="_on_recruit_sec_pressed"]
+[connection signal="pressed" from="Margin/RootVBox/Buttons/AdvanceDayButton" to="." method="_on_advance_day_pressed"]
+[connection signal="pressed" from="Margin/RootVBox/Buttons/StartFightButton" to="." method="_on_start_fight_pressed"]
+[connection signal="pressed" from="Margin/RootVBox/Buttons/SaveButton" to="." method="_on_save_pressed"]
+[connection signal="pressed" from="Margin/RootVBox/Buttons/LoadButton" to="." method="_on_load_pressed"]
