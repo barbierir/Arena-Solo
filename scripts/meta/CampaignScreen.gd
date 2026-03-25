@@ -14,7 +14,6 @@ const COMBAT_ADAPTER_SCRIPT: GDScript = preload("res://scripts/combat/bridge/Cam
 @onready var _today_event_risk_value: Label = %TodayEventRiskValue
 @onready var _roster_list: ItemList = %RosterList
 @onready var _selected_fighter_value: Label = %SelectedFighterValue
-@onready var _game_over_label: Label = %GameOverLabel
 @onready var _event_log: RichTextLabel = %EventLog
 @onready var _start_fight_button: Button = %StartFightButton
 @onready var _new_game_button: Button = %NewGameButton
@@ -25,6 +24,9 @@ const COMBAT_ADAPTER_SCRIPT: GDScript = preload("res://scripts/combat/bridge/Cam
 @onready var _load_button: Button = %LoadButton
 @onready var _last_fight_result: RichTextLabel = %LastFightResult
 @onready var _combat_viewer: CampaignCombatViewer = %CampaignCombatViewer
+@onready var _end_game_overlay: Control = %EndGameOverlay
+@onready var _end_game_title: Label = %EndGameTitle
+@onready var _end_game_stats: Label = %EndGameStats
 
 var _combat_adapter: CampaignCombatAdapter
 var _is_fight_flow_active: bool = false
@@ -52,6 +54,8 @@ func _on_new_game_pressed() -> void:
 	_refresh_recent_events()
 
 func _on_recruit_ret_pressed() -> void:
+	if not GameManager.is_campaign_running():
+		return
 	var result: Dictionary = GameManager.recruit_gladiator("RET")
 	if result.has("error"):
 		GameManager.add_recent_event("Recruit RET fallito: %s" % str(result.get("error", "")))
@@ -59,6 +63,8 @@ func _on_recruit_ret_pressed() -> void:
 		return
 
 func _on_recruit_sec_pressed() -> void:
+	if not GameManager.is_campaign_running():
+		return
 	var result: Dictionary = GameManager.recruit_gladiator("SEC")
 	if result.has("error"):
 		GameManager.add_recent_event("Recruit SEC fallito: %s" % str(result.get("error", "")))
@@ -66,12 +72,16 @@ func _on_recruit_sec_pressed() -> void:
 		return
 
 func _on_advance_day_pressed() -> void:
+	if not GameManager.is_campaign_running():
+		return
 	GameManager.advance_day()
 	GameManager.add_recent_event("Giorno avanzato.")
 	_refresh_recent_events()
 
 func _on_start_fight_pressed() -> void:
 	if _is_fight_flow_active:
+		return
+	if not GameManager.is_campaign_running():
 		return
 	var payload: Dictionary = GameManager.start_next_fight()
 	if payload.has("error"):
@@ -117,6 +127,9 @@ func _on_roster_updated() -> void:
 
 func _on_state_changed(new_state: String) -> void:
 	_state_value.text = new_state
+	_refresh_campaign_end_overlay()
+	if not _is_fight_flow_active:
+		_refresh_start_fight_button_state()
 
 func _on_recent_events_updated(_events: Array[String]) -> void:
 	_refresh_recent_events()
@@ -189,7 +202,7 @@ func _refresh_all() -> void:
 	_render_roster()
 	_refresh_selected_fighter()
 	_refresh_recent_events()
-	_refresh_game_over_state()
+	_refresh_campaign_end_overlay()
 	_refresh_today_event()
 	if not _is_fight_flow_active:
 		_refresh_start_fight_button_state()
@@ -237,25 +250,25 @@ func _refresh_recent_events() -> void:
 
 func _set_campaign_controls_enabled(enabled: bool) -> void:
 	_campaign_controls_enabled = enabled
-	var is_game_over: bool = GameManager.is_game_over()
-	var can_fight_now: bool = enabled and GameManager.can_start_fight() and not is_game_over
+	var campaign_running: bool = GameManager.is_campaign_running()
+	var controls_enabled: bool = enabled and campaign_running
+	var can_fight_now: bool = controls_enabled and GameManager.can_start_fight()
 	_new_game_button.disabled = not enabled
-	_recruit_ret_button.disabled = not enabled
-	_recruit_sec_button.disabled = not enabled
-	_advance_day_button.disabled = not enabled
+	_recruit_ret_button.disabled = not controls_enabled
+	_recruit_sec_button.disabled = not controls_enabled
+	_advance_day_button.disabled = not controls_enabled
 	_start_fight_button.disabled = not can_fight_now
-	_save_button.disabled = not enabled
-	_load_button.disabled = not enabled
+	_save_button.disabled = not controls_enabled
+	_load_button.disabled = not controls_enabled
 	_roster_list.select_mode = ItemList.SELECT_SINGLE
-	_roster_list.mouse_filter = Control.MOUSE_FILTER_STOP if enabled else Control.MOUSE_FILTER_IGNORE
-	_refresh_game_over_state()
+	_roster_list.mouse_filter = Control.MOUSE_FILTER_STOP if controls_enabled else Control.MOUSE_FILTER_IGNORE
+	_refresh_campaign_end_overlay()
 	_refresh_start_fight_button_state()
 
 func _refresh_start_fight_button_state() -> void:
 	var event_data: Dictionary = GameManager.get_current_event()
 	var is_rest_day: bool = str(event_data.get("type", "FIGHT")) == GameManager.EVENT_TYPE_REST
-	var is_game_over: bool = GameManager.is_game_over()
-	var can_fight_now: bool = _campaign_controls_enabled and GameManager.can_start_fight() and not is_game_over and not _is_fight_flow_active
+	var can_fight_now: bool = _campaign_controls_enabled and GameManager.is_campaign_running() and GameManager.can_start_fight() and not _is_fight_flow_active
 	_start_fight_button.disabled = not can_fight_now
 	_start_fight_button.text = "No Fights Today" if is_rest_day else "Enter Arena"
 
@@ -294,9 +307,19 @@ func _refresh_selected_fighter() -> void:
 		int(selected.get("level", selected.get("livello", 1))),
 	]
 
-func _refresh_game_over_state() -> void:
-	if GameManager.is_game_over():
-		_game_over_label.visible = true
-		_game_over_label.text = "GAME OVER: Nessun gladiatore vivo nel roster."
+func _refresh_campaign_end_overlay() -> void:
+	var state: String = GameManager.game_state
+	var is_final_state: bool = state == GameManager.STATE_VICTORY or state == GameManager.STATE_DEFEAT
+	_end_game_overlay.visible = is_final_state
+	if not is_final_state:
 		return
-	_game_over_label.visible = false
+	if state == GameManager.STATE_VICTORY:
+		_end_game_title.text = "You have become a legendary Lanista"
+		_end_game_stats.text = "Days: %d\nFame: %d\nSurviving gladiators: %d" % [
+			GameManager.day,
+			GameManager.fame,
+			GameManager.get_surviving_gladiators_count(),
+		]
+		return
+	_end_game_title.text = "Your school has fallen"
+	_end_game_stats.text = "Days: %d\nFame: %d" % [GameManager.day, GameManager.fame]

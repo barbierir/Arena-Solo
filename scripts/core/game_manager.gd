@@ -11,6 +11,10 @@ signal daily_event_updated(event_data: Dictionary)
 
 const SAVE_PATH: String = "user://savegame.json"
 
+const STATE_RUNNING: String = "running"
+const STATE_VICTORY: String = "victory"
+const STATE_DEFEAT: String = "defeat"
+
 const STATE_IDLE: String = "idle"
 const STATE_PREPARING_FIGHT: String = "preparing_fight"
 const STATE_IN_FIGHT: String = "in_fight"
@@ -19,6 +23,8 @@ const STATE_RESOLVING_FIGHT: String = "resolving_fight"
 const STARTING_GOLD: int = 100
 const STARTING_FAME: int = 0
 const STARTING_DAY: int = 1
+const VICTORY_FAME_TARGET: int = 50
+const VICTORY_DAY_TARGET: int = 30
 
 const RECRUIT_COST_RET: int = 30
 const RECRUIT_COST_SEC: int = 30
@@ -70,7 +76,7 @@ var next_enemy_index: int = 1
 var roster: Array[Dictionary] = []
 var battle_history: Array[Dictionary] = []
 var recent_events: Array[String] = []
-var game_state: String = STATE_IDLE
+var game_state: String = STATE_RUNNING
 var selected_gladiator_id: String = ""
 var current_event: Dictionary = {}
 
@@ -91,7 +97,7 @@ func new_game() -> void:
 	battle_history.clear()
 	recent_events.clear()
 	current_event = generate_daily_event()
-	_set_game_state(STATE_IDLE)
+	_set_game_state(STATE_RUNNING)
 	recruit_gladiator("RET")
 	recruit_gladiator("SEC")
 	add_recent_event("Nuova campagna avviata (giorno %d)." % day)
@@ -124,7 +130,8 @@ func load_game() -> bool:
 
 	var data: Dictionary = parsed as Dictionary
 	_apply_loaded_data(data)
-	_set_game_state(str(data.get("game_state", STATE_IDLE)))
+	_set_game_state(_sanitize_game_state(data.get("game_state", STATE_RUNNING)))
+	check_end_conditions()
 	roster_updated.emit()
 	_emit_resources_updated()
 	_emit_recent_events_updated()
@@ -157,12 +164,15 @@ func save_game() -> bool:
 	return true
 
 func advance_day() -> void:
+	if not is_campaign_running():
+		return
 	day += 1
 	current_event = generate_daily_event()
 	heal_and_update_injuries()
 	if _is_rest_event(current_event):
 		apply_rest_day_recovery_bonus()
 	apply_daily_upkeep()
+	check_end_conditions()
 	save_game()
 	roster_updated.emit()
 	_emit_resources_updated()
@@ -219,9 +229,21 @@ func has_living_gladiators() -> bool:
 	return false
 
 func is_game_over() -> bool:
-	return not has_living_gladiators()
+	return game_state == STATE_DEFEAT or not has_living_gladiators()
+
+func is_campaign_running() -> bool:
+	return game_state == STATE_RUNNING
+
+func get_surviving_gladiators_count() -> int:
+	var alive_count: int = 0
+	for gladiator: Dictionary in roster:
+		if bool(gladiator.get("alive", false)):
+			alive_count += 1
+	return alive_count
 
 func recruit_gladiator(gladiator_class: String) -> Dictionary:
+	if not is_campaign_running():
+		return {"error": "Campaign has already ended"}
 	var normalized_class: String = gladiator_class.strip_edges().to_upper()
 	var recruit_cost: int = _recruit_cost_for_class(normalized_class)
 	if recruit_cost <= 0:
@@ -240,6 +262,8 @@ func recruit_gladiator(gladiator_class: String) -> Dictionary:
 	return gladiator.duplicate(true)
 
 func can_start_fight() -> bool:
+	if not is_campaign_running():
+		return false
 	if _is_rest_event(get_current_event()):
 		return false
 	return get_available_gladiators().size() >= 1
@@ -269,6 +293,8 @@ func get_current_event() -> Dictionary:
 	return _sanitize_event(current_event)
 
 func start_next_fight() -> Dictionary:
+	if not is_campaign_running():
+		return {"error": "Campaign has already ended"}
 	var today_event: Dictionary = get_current_event()
 	if _is_rest_event(today_event):
 		return {"error": "The arena is closed today. Your gladiators recover."}
@@ -334,16 +360,16 @@ func generate_enemy_for(player_gladiator: Dictionary) -> Dictionary:
 	return enemy
 
 func abort_active_fight(reason: String = "") -> void:
-	if game_state == STATE_IDLE:
+	if game_state == STATE_RUNNING:
 		return
 	if reason != "":
 		push_warning("GameManager.abort_active_fight called: %s" % reason)
-	_set_game_state(STATE_IDLE)
+	_set_game_state(STATE_RUNNING)
 
 func resolve_fight(result: Dictionary) -> void:
 	if not _result_has_required_fields(result):
 		push_error("GameManager.resolve_fight: incomplete result payload: %s" % JSON.stringify(result))
-		_set_game_state(STATE_IDLE)
+		_set_game_state(STATE_RUNNING)
 		return
 
 	_set_game_state(STATE_RESOLVING_FIGHT)
@@ -385,13 +411,28 @@ func resolve_fight(result: Dictionary) -> void:
 		int(result.get("turns", 0)),
 	])
 	_add_player_outcome_event(winner_id, loser_id, loser_dead, reward_summary)
+	check_end_conditions()
 
 	save_game()
 	roster_updated.emit()
 	_emit_resources_updated()
 	_emit_recent_events_updated()
 	fight_resolved.emit(result)
-	_set_game_state(STATE_IDLE)
+	if game_state == STATE_RESOLVING_FIGHT:
+		_set_game_state(STATE_RUNNING)
+
+func check_end_conditions() -> void:
+	if game_state == STATE_VICTORY or game_state == STATE_DEFEAT:
+		return
+	if not has_living_gladiators():
+		_set_game_state(STATE_DEFEAT)
+		add_recent_event("All your gladiators are dead.")
+		return
+	var reached_fame_target: bool = fame >= VICTORY_FAME_TARGET
+	var reached_day_target_with_survivor: bool = day >= VICTORY_DAY_TARGET and has_living_gladiators()
+	if reached_fame_target or reached_day_target_with_survivor:
+		_set_game_state(STATE_VICTORY)
+		add_recent_event("Your school has achieved glory!")
 
 func award_post_fight_rewards(winner_id: String, loser_id: String, result: Dictionary) -> Dictionary:
 	var player_id: String = str(result.get("player_gladiator_id", _resolve_player_gladiator_id(winner_id, loser_id)))
@@ -697,8 +738,17 @@ func _apply_loaded_data(data: Dictionary) -> void:
 	battle_history = _sanitize_battle_history(data.get("battle_history", []))
 	recent_events = _sanitize_recent_events(data.get("recent_events", []))
 	current_event = _sanitize_event(data.get("current_event", {}))
+	game_state = _sanitize_game_state(data.get("game_state", STATE_RUNNING))
 	if current_event.is_empty():
 		current_event = generate_daily_event()
+
+func _sanitize_game_state(raw_value: Variant) -> String:
+	var state: String = str(raw_value).to_lower()
+	if state == STATE_RUNNING or state == STATE_VICTORY or state == STATE_DEFEAT:
+		return state
+	if state == STATE_IDLE or state == STATE_PREPARING_FIGHT or state == STATE_IN_FIGHT or state == STATE_RESOLVING_FIGHT:
+		return STATE_RUNNING
+	return STATE_RUNNING
 
 func _sanitize_roster(raw_value: Variant) -> Array[Dictionary]:
 	var sanitized: Array[Dictionary] = []
@@ -833,6 +883,8 @@ func apply_rest_day_recovery_bonus() -> void:
 			add_recent_event("%s fully recovered during the arena rest day." % get_gladiator_display_name(gladiator))
 
 func _set_game_state(new_state: String) -> void:
+	if game_state == new_state:
+		return
 	game_state = new_state
 	game_state_changed.emit(game_state)
 

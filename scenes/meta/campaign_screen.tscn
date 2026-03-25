@@ -291,6 +291,59 @@ scroll_following = true
 unique_name_in_owner = true
 layout_mode = 1
 
+[node name="EndGameOverlay" type="ColorRect" parent="."]
+unique_name_in_owner = true
+visible = false
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+color = Color(0, 0, 0, 0.72)
+
+[node name="CenterContainer" type="CenterContainer" parent="EndGameOverlay"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Panel" type="PanelContainer" parent="EndGameOverlay/CenterContainer"]
+layout_mode = 2
+custom_minimum_size = Vector2(540, 220)
+
+[node name="OverlayMargin" type="MarginContainer" parent="EndGameOverlay/CenterContainer/Panel"]
+layout_mode = 2
+theme_override_constants/margin_left = 20
+theme_override_constants/margin_top = 18
+theme_override_constants/margin_right = 20
+theme_override_constants/margin_bottom = 18
+
+[node name="OverlayVBox" type="VBoxContainer" parent="EndGameOverlay/CenterContainer/Panel/OverlayMargin"]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="EndGameTitle" type="Label" parent="EndGameOverlay/CenterContainer/Panel/OverlayMargin/OverlayVBox"]
+unique_name_in_owner = true
+layout_mode = 2
+horizontal_alignment = 1
+text = "Campaign Result"
+
+[node name="EndGameStats" type="Label" parent="EndGameOverlay/CenterContainer/Panel/OverlayMargin/OverlayVBox"]
+unique_name_in_owner = true
+layout_mode = 2
+horizontal_alignment = 1
+text = "Days: 0\nFame: 0"
+
+[node name="OverlayNewGameButton" type="Button" parent="EndGameOverlay/CenterContainer/Panel/OverlayMargin/OverlayVBox"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 4
+text = "New Game"
+
 [connection signal="pressed" from="Margin/RootVBox/ActionsPanel/ActionsMargin/Buttons/NewGameButton" to="." method="_on_new_game_pressed"]
 [connection signal="pressed" from="Margin/RootVBox/ActionsPanel/ActionsMargin/Buttons/RecruitRetButton" to="." method="_on_recruit_ret_pressed"]
 [connection signal="pressed" from="Margin/RootVBox/ActionsPanel/ActionsMargin/Buttons/RecruitSecButton" to="." method="_on_recruit_sec_pressed"]
@@ -299,3 +352,4 @@ layout_mode = 1
 [connection signal="pressed" from="Margin/RootVBox/ActionsPanel/ActionsMargin/Buttons/SaveButton" to="." method="_on_save_pressed"]
 [connection signal="pressed" from="Margin/RootVBox/ActionsPanel/ActionsMargin/Buttons/LoadButton" to="." method="_on_load_pressed"]
 [connection signal="item_selected" from="Margin/RootVBox/ContentRow/RosterPanel/RosterMargin/RosterVBox/RosterList" to="." method="_on_roster_list_item_selected"]
+[connection signal="pressed" from="EndGameOverlay/CenterContainer/Panel/OverlayMargin/OverlayVBox/OverlayNewGameButton" to="." method="_on_new_game_pressed"]
