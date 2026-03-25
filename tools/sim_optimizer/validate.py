@@ -48,8 +48,23 @@ def load_reference_reports(reference_dir: Path) -> tuple[dict[str, dict[str, Any
     return reports, notes
 
 
-def compare_suite_to_references(definitions_dir: Path, reference_dir: Path, runs: int, max_turns: int, seed: int) -> dict[str, Any]:
-    suite = run_suite(definitions_dir, runs=runs, max_turns=max_turns, base_seed=seed)
+def compare_suite_to_references(
+    definitions_dir: Path,
+    reference_dir: Path,
+    runs: int,
+    max_turns: int,
+    seed: int,
+    enable_matchup_modifiers: bool = True,
+    verbose: bool = False,
+) -> dict[str, Any]:
+    suite = run_suite(
+        definitions_dir,
+        runs=runs,
+        max_turns=max_turns,
+        base_seed=seed,
+        enable_matchup_modifiers=enable_matchup_modifiers,
+        verbose=verbose,
+    )
     references, reference_notes = load_reference_reports(reference_dir)
     comparisons = {}
 

@@ -1,0 +1,14 @@
+{
+  "RET_STARTER_vs_RET_STARTER": {
+    "global_damage_multiplier": 0.9
+  },
+  "SEC_STARTER_vs_SEC_STARTER": {
+    "recover_value_multiplier": 0.8
+  },
+  "RET_STARTER_vs_SEC_STARTER": {
+    "attacker_bonus_hp": 1
+  },
+  "SEC_STARTER_vs_RET_STARTER": {
+    "defender_bonus_hp": 1
+  }
+}

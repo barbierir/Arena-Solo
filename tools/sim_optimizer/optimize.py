@@ -96,6 +96,8 @@ def optimize(
     max_turns: int,
     seed: int,
     param_config: Path | None,
+    enable_matchup_modifiers: bool = True,
+    verbose: bool = False,
 ) -> dict[str, Any]:
     param_space = load_param_config(param_config)
     rng = random.Random(seed)
@@ -114,10 +116,46 @@ def optimize(
         params = {k: int(v) for k, v in zip(keys, combo)}
         candidate_defs = _apply_params(definitions_dir, params, tmp_base / f"cand_{idx}")
         matchups = {
-            "RET_STARTER_vs_RET_STARTER": run_batch(candidate_defs, "RET_STARTER", "RET_STARTER", 7100, runs_per_matchup, max_turns),
-            "SEC_STARTER_vs_SEC_STARTER": run_batch(candidate_defs, "SEC_STARTER", "SEC_STARTER", 6100, runs_per_matchup, max_turns),
-            "RET_STARTER_vs_SEC_STARTER": run_batch(candidate_defs, "RET_STARTER", "SEC_STARTER", 9100, runs_per_matchup, max_turns),
-            "SEC_STARTER_vs_RET_STARTER": run_batch(candidate_defs, "SEC_STARTER", "RET_STARTER", 8100, runs_per_matchup, max_turns),
+            "RET_STARTER_vs_RET_STARTER": run_batch(
+                candidate_defs,
+                "RET_STARTER",
+                "RET_STARTER",
+                7100,
+                runs_per_matchup,
+                max_turns,
+                enable_matchup_modifiers=enable_matchup_modifiers,
+                verbose=verbose,
+            ),
+            "SEC_STARTER_vs_SEC_STARTER": run_batch(
+                candidate_defs,
+                "SEC_STARTER",
+                "SEC_STARTER",
+                6100,
+                runs_per_matchup,
+                max_turns,
+                enable_matchup_modifiers=enable_matchup_modifiers,
+                verbose=verbose,
+            ),
+            "RET_STARTER_vs_SEC_STARTER": run_batch(
+                candidate_defs,
+                "RET_STARTER",
+                "SEC_STARTER",
+                9100,
+                runs_per_matchup,
+                max_turns,
+                enable_matchup_modifiers=enable_matchup_modifiers,
+                verbose=verbose,
+            ),
+            "SEC_STARTER_vs_RET_STARTER": run_batch(
+                candidate_defs,
+                "SEC_STARTER",
+                "RET_STARTER",
+                8100,
+                runs_per_matchup,
+                max_turns,
+                enable_matchup_modifiers=enable_matchup_modifiers,
+                verbose=verbose,
+            ),
         }
         candidates.append({"params": params, "score": _score(matchups), "matchups": matchups})
 
