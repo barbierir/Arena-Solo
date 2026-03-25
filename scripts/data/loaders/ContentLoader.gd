@@ -27,6 +27,8 @@ func load_all_definitions() -> ContentRegistry:
 	return registry
 
 func _load_optional_json(path: String) -> Dictionary:
+	# Optional definitions (like matchup modifiers) should fail open:
+	# if the file is absent, combat still runs with default behavior.
 	if not FileAccess.file_exists(path):
 		return {}
 	return _load_json(path)

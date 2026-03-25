@@ -12,6 +12,7 @@ func resolve_damage(base_damage: int, crit_chance: float, crit_multiplier: float
 	var damage: int = base_damage
 	if is_crit:
 		damage = int(round(base_damage * crit_multiplier))
+	# Optional matchup-level post-crit scalar from matchup_modifiers.json.
 	var global_multiplier: float = float(matchup_modifiers.get("global_damage_multiplier", 1.0))
 	damage = maxi(1, int(round(float(damage) * maxf(0.0, global_multiplier))))
 	return {"damage": damage, "is_crit": is_crit}
