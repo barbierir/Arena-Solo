@@ -9,6 +9,7 @@ var skills: Dictionary = {}
 var status_effects: Dictionary = {}
 var ai_profiles: Dictionary = {}
 var encounters: Dictionary = {}
+var matchup_modifiers: Dictionary = {}
 
 func as_dictionary() -> Dictionary:
 	return {
@@ -20,4 +21,5 @@ func as_dictionary() -> Dictionary:
 		"status_effects": status_effects,
 		"ai_profiles": ai_profiles,
 		"encounters": encounters,
+		"matchup_modifiers": matchup_modifiers,
 	}

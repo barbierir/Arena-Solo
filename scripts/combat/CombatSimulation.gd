@@ -5,12 +5,14 @@ const COMBAT_RUNTIME_STATE_SCRIPT := preload("res://scripts/combat/runtime/Comba
 const COMBATANT_RUNTIME_STATE_SCRIPT := preload("res://scripts/combat/runtime/CombatantRuntimeState.gd")
 const TURN_CONTROLLER_SCRIPT := preload("res://scripts/combat/TurnController.gd")
 const BUILD_STATS_RESOLVER_SCRIPT := preload("res://scripts/combat/systems/BuildStatsResolver.gd")
+const MATCHUP_MODIFIER_RESOLVER_SCRIPT := preload("res://scripts/combat/systems/MatchupModifierResolver.gd")
 
 var content_registry: ContentRegistry
 var rng_service: SeededRngService
 var runtime_state: CombatRuntimeState
 var turn_controller: TurnController
 var build_stats_resolver: BuildStatsResolver
+var matchup_modifier_resolver: MatchupModifierResolver
 
 func configure(registry: ContentRegistry, rng: SeededRngService) -> void:
 	content_registry = registry
@@ -19,6 +21,7 @@ func configure(registry: ContentRegistry, rng: SeededRngService) -> void:
 	turn_controller.configure(registry, rng)
 	build_stats_resolver = BUILD_STATS_RESOLVER_SCRIPT.new()
 	build_stats_resolver.configure(registry)
+	matchup_modifier_resolver = MATCHUP_MODIFIER_RESOLVER_SCRIPT.new()
 
 func bootstrap_default_encounter(attacker_build_id: String, defender_build_id: String) -> void:
 	initialize_fight(attacker_build_id, defender_build_id)
@@ -29,8 +32,12 @@ func initialize_fight(attacker_build_id: String, defender_build_id: String) -> v
 	runtime_state.defender_build_id = defender_build_id
 	runtime_state.combatant_states[CombatRuntimeState.ATTACKER_SIDE_ID] = _make_combatant_state(attacker_build_id, CombatRuntimeState.ATTACKER_SIDE_ID)
 	runtime_state.combatant_states[CombatRuntimeState.DEFENDER_SIDE_ID] = _make_combatant_state(defender_build_id, CombatRuntimeState.DEFENDER_SIDE_ID)
+	runtime_state.matchup_modifiers = matchup_modifier_resolver.resolve(attacker_build_id, defender_build_id, content_registry)
+	_apply_matchup_hp_modifiers(runtime_state)
 	runtime_state.next_actor_id = _resolve_first_actor()
 	runtime_state.append_log("Encounter initialized: %s vs %s (seed=%d)" % [attacker_build_id, defender_build_id, rng_service.get_seed()])
+	if not runtime_state.matchup_modifiers.is_empty():
+		runtime_state.append_log("Matchup modifiers active: %s" % JSON.stringify(runtime_state.matchup_modifiers))
 
 func simulate_single_turn() -> void:
 	if runtime_state == null or is_finished():
@@ -88,6 +95,23 @@ func _make_combatant_state(build_id: String, combatant_id: String) -> CombatantR
 	state.total_hit_mod_pct = float(stats.total_hit_mod_pct)
 	state.total_crit_mod_pct = float(stats.total_crit_mod_pct)
 	return state
+
+func _apply_matchup_hp_modifiers(state: CombatRuntimeState) -> void:
+	var modifiers: Dictionary = state.matchup_modifiers
+	if modifiers.is_empty():
+		return
+	var attacker_bonus: int = int(modifiers.get("attacker_bonus_hp", 0)) + int(modifiers.get("both_bonus_hp", 0))
+	var defender_bonus: int = int(modifiers.get("defender_bonus_hp", 0)) + int(modifiers.get("both_bonus_hp", 0))
+	if attacker_bonus != 0:
+		_apply_hp_bonus(state.attacker_state(), attacker_bonus)
+	if defender_bonus != 0:
+		_apply_hp_bonus(state.defender_state(), defender_bonus)
+
+func _apply_hp_bonus(combatant: CombatantRuntimeState, bonus_hp: int) -> void:
+	if combatant == null or bonus_hp == 0:
+		return
+	combatant.max_hp = maxi(1, combatant.max_hp + bonus_hp)
+	combatant.current_hp = combatant.max_hp
 
 func _resolve_first_actor() -> String:
 	var attacker: CombatantRuntimeState = runtime_state.attacker_state()

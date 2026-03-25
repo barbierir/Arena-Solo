@@ -166,7 +166,7 @@ func _execute_action(runtime_state: CombatRuntimeState, actor: CombatantRuntimeS
 
 	var base_damage: int = _damage_system.calculate_base_damage(actor, target, skill, controls, status_defs)
 	var crit_chance: float = _hit_chance_system.calculate_crit(actor, skill, controls)
-	var resolved: Dictionary = _damage_system.resolve_damage(base_damage, crit_chance, float(controls.get("crit_multiplier", 2.0)), _rng_service)
+	var resolved: Dictionary = _damage_system.resolve_damage(base_damage, crit_chance, float(controls.get("crit_multiplier", 2.0)), _rng_service, runtime_state.matchup_modifiers)
 	var damage: int = int(resolved.damage)
 	target.current_hp = maxi(0, target.current_hp - damage)
 	var crit_tag: String = ""

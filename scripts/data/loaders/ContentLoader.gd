@@ -10,6 +10,7 @@ const FILES: Dictionary = {
 	"status_effects": "res://data/definitions/status_effects.json",
 	"ai_profiles": "res://data/definitions/ai_profiles.json",
 	"encounters": "res://data/definitions/encounters.json",
+	"matchup_modifiers": "res://data/definitions/matchup_modifiers.json",
 }
 
 func load_all_definitions() -> ContentRegistry:
@@ -22,7 +23,13 @@ func load_all_definitions() -> ContentRegistry:
 	registry.builds = _load_json(FILES.builds)
 	registry.ai_profiles = _load_json(FILES.ai_profiles)
 	registry.encounters = _load_json(FILES.encounters)
+	registry.matchup_modifiers = _load_optional_json(FILES.matchup_modifiers)
 	return registry
+
+func _load_optional_json(path: String) -> Dictionary:
+	if not FileAccess.file_exists(path):
+		return {}
+	return _load_json(path)
 
 func _load_json(path: String) -> Dictionary:
 	if not FileAccess.file_exists(path):
