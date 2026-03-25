@@ -1,0 +1,187 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/combat/ui/CampaignCombatViewer.gd" id="1_1"]
+
+[node name="CampaignCombatViewer" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 1
+visible = false
+script = ExtResource("1_1")
+
+[node name="Backdrop" type="ColorRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0, 0, 0, 0.45)
+
+[node name="Center" type="CenterContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Panel" type="PanelContainer" parent="Center"]
+custom_minimum_size = Vector2(980, 620)
+layout_mode = 2
+
+[node name="Margin" type="MarginContainer" parent="Center/Panel"]
+layout_mode = 2
+theme_override_constants/margin_left = 14
+theme_override_constants/margin_top = 14
+theme_override_constants/margin_right = 14
+theme_override_constants/margin_bottom = 14
+
+[node name="RootVBox" type="VBoxContainer" parent="Center/Panel/Margin"]
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="HeaderLabel" type="Label" parent="Center/Panel/Margin/RootVBox"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Arena Fight"
+
+[node name="PreFightRow" type="HBoxContainer" parent="Center/Panel/Margin/RootVBox"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="FighterACard" type="PanelContainer" parent="Center/Panel/Margin/RootVBox/PreFightRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="FighterAMargin" type="MarginContainer" parent="Center/Panel/Margin/RootVBox/PreFightRow/FighterACard"]
+layout_mode = 2
+theme_override_constants/margin_left = 10
+theme_override_constants/margin_top = 10
+theme_override_constants/margin_right = 10
+theme_override_constants/margin_bottom = 10
+
+[node name="FighterAVBox" type="VBoxContainer" parent="Center/Panel/Margin/RootVBox/PreFightRow/FighterACard/FighterAMargin"]
+layout_mode = 2
+
+[node name="FighterAName" type="Label" parent="Center/Panel/Margin/RootVBox/PreFightRow/FighterACard/FighterAMargin/FighterAVBox"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Fighter A"
+
+[node name="FighterAClass" type="Label" parent="Center/Panel/Margin/RootVBox/PreFightRow/FighterACard/FighterAMargin/FighterAVBox"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Classe: -"
+
+[node name="FighterAHp" type="Label" parent="Center/Panel/Margin/RootVBox/PreFightRow/FighterACard/FighterAMargin/FighterAVBox"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "HP: -"
+
+[node name="FighterBCard" type="PanelContainer" parent="Center/Panel/Margin/RootVBox/PreFightRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="FighterBMargin" type="MarginContainer" parent="Center/Panel/Margin/RootVBox/PreFightRow/FighterBCard"]
+layout_mode = 2
+theme_override_constants/margin_left = 10
+theme_override_constants/margin_top = 10
+theme_override_constants/margin_right = 10
+theme_override_constants/margin_bottom = 10
+
+[node name="FighterBVBox" type="VBoxContainer" parent="Center/Panel/Margin/RootVBox/PreFightRow/FighterBCard/FighterBMargin"]
+layout_mode = 2
+
+[node name="FighterBName" type="Label" parent="Center/Panel/Margin/RootVBox/PreFightRow/FighterBCard/FighterBMargin/FighterBVBox"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Fighter B"
+
+[node name="FighterBClass" type="Label" parent="Center/Panel/Margin/RootVBox/PreFightRow/FighterBCard/FighterBMargin/FighterBVBox"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Classe: -"
+
+[node name="FighterBHp" type="Label" parent="Center/Panel/Margin/RootVBox/PreFightRow/FighterBCard/FighterBMargin/FighterBVBox"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "HP: -"
+
+[node name="TurnLabel" type="Label" parent="Center/Panel/Margin/RootVBox"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Turno: -"
+
+[node name="LogPanel" type="PanelContainer" parent="Center/Panel/Margin/RootVBox"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="LogMargin" type="MarginContainer" parent="Center/Panel/Margin/RootVBox/LogPanel"]
+layout_mode = 2
+theme_override_constants/margin_left = 8
+theme_override_constants/margin_top = 8
+theme_override_constants/margin_right = 8
+theme_override_constants/margin_bottom = 8
+
+[node name="CombatLog" type="RichTextLabel" parent="Center/Panel/Margin/RootVBox/LogPanel/LogMargin"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 3
+bbcode_enabled = false
+scroll_following = true
+fit_content = false
+
+[node name="ResultPanel" type="PanelContainer" parent="Center/Panel/Margin/RootVBox"]
+unique_name_in_owner = true
+layout_mode = 2
+visible = false
+
+[node name="ResultMargin" type="MarginContainer" parent="Center/Panel/Margin/RootVBox/ResultPanel"]
+layout_mode = 2
+theme_override_constants/margin_left = 8
+theme_override_constants/margin_top = 8
+theme_override_constants/margin_right = 8
+theme_override_constants/margin_bottom = 8
+
+[node name="ResultText" type="RichTextLabel" parent="Center/Panel/Margin/RootVBox/ResultPanel/ResultMargin"]
+unique_name_in_owner = true
+layout_mode = 2
+bbcode_enabled = true
+fit_content = true
+scroll_active = false
+
+[node name="Footer" type="HBoxContainer" parent="Center/Panel/Margin/RootVBox"]
+layout_mode = 2
+alignment = 2
+theme_override_constants/separation = 8
+
+[node name="NextButton" type="Button" parent="Center/Panel/Margin/RootVBox/Footer"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Resolve Step"
+
+[node name="PlayAllButton" type="Button" parent="Center/Panel/Margin/RootVBox/Footer"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Play All"
+
+[node name="CloseButton" type="Button" parent="Center/Panel/Margin/RootVBox/Footer"]
+unique_name_in_owner = true
+layout_mode = 2
+disabled = true
+text = "Close"
+
+[node name="PlaybackTimer" type="Timer" parent="."]
+unique_name_in_owner = true
+wait_time = 0.35
+one_shot = false
+autostart = false
+
+[connection signal="pressed" from="Center/Panel/Margin/RootVBox/Footer/NextButton" to="." method="_on_next_button_pressed"]
+[connection signal="pressed" from="Center/Panel/Margin/RootVBox/Footer/PlayAllButton" to="." method="_on_play_all_button_pressed"]
+[connection signal="pressed" from="Center/Panel/Margin/RootVBox/Footer/CloseButton" to="." method="_on_close_button_pressed"]

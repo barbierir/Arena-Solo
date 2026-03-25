@@ -175,6 +175,14 @@ func start_next_fight() -> Dictionary:
 	_set_game_state(STATE_IN_FIGHT)
 	return payload
 
+
+func abort_active_fight(reason: String = "") -> void:
+	if game_state == STATE_IDLE:
+		return
+	if reason != "":
+		push_warning("GameManager.abort_active_fight called: %s" % reason)
+	_set_game_state(STATE_IDLE)
+
 func resolve_fight(result: Dictionary) -> void:
 	if not _result_has_required_fields(result):
 		push_error("GameManager.resolve_fight: incomplete result payload: %s" % JSON.stringify(result))
