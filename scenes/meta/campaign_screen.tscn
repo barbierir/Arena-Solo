@@ -180,6 +180,54 @@ size_flags_horizontal = 3
 size_flags_vertical = 3
 theme_override_constants/separation = 8
 
+[node name="TodayEventPanel" type="PanelContainer" parent="Margin/RootVBox/ContentRow/SidePanel"]
+layout_mode = 2
+
+[node name="TodayEventMargin" type="MarginContainer" parent="Margin/RootVBox/ContentRow/SidePanel/TodayEventPanel"]
+layout_mode = 2
+theme_override_constants/margin_left = 8
+theme_override_constants/margin_top = 8
+theme_override_constants/margin_right = 8
+theme_override_constants/margin_bottom = 8
+
+[node name="TodayEventVBox" type="VBoxContainer" parent="Margin/RootVBox/ContentRow/SidePanel/TodayEventPanel/TodayEventMargin"]
+layout_mode = 2
+theme_override_constants/separation = 4
+
+[node name="TodayEventTitle" type="Label" parent="Margin/RootVBox/ContentRow/SidePanel/TodayEventPanel/TodayEventMargin/TodayEventVBox"]
+layout_mode = 2
+text = "TODAY'S EVENT"
+
+[node name="TodayEventNameValue" type="Label" parent="Margin/RootVBox/ContentRow/SidePanel/TodayEventPanel/TodayEventMargin/TodayEventVBox"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Arena Bout"
+
+[node name="TodayEventTypeLabel" type="Label" parent="Margin/RootVBox/ContentRow/SidePanel/TodayEventPanel/TodayEventMargin/TodayEventVBox"]
+layout_mode = 2
+text = "Type:"
+
+[node name="TodayEventTypeValue" type="Label" parent="Margin/RootVBox/ContentRow/SidePanel/TodayEventPanel/TodayEventMargin/TodayEventVBox"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "FIGHT"
+
+[node name="TodayEventDescriptionValue" type="Label" parent="Margin/RootVBox/ContentRow/SidePanel/TodayEventPanel/TodayEventMargin/TodayEventVBox"]
+unique_name_in_owner = true
+layout_mode = 2
+autowrap_mode = 2
+text = "A standard arena day."
+
+[node name="TodayEventRewardValue" type="Label" parent="Margin/RootVBox/ContentRow/SidePanel/TodayEventPanel/TodayEventMargin/TodayEventVBox"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "+0% rewards"
+
+[node name="TodayEventRiskValue" type="Label" parent="Margin/RootVBox/ContentRow/SidePanel/TodayEventPanel/TodayEventMargin/TodayEventVBox"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Standard risk of death"
+
 [node name="LastFightPanel" type="PanelContainer" parent="Margin/RootVBox/ContentRow/SidePanel"]
 layout_mode = 2
 
