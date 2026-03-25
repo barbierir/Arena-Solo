@@ -1,0 +1,1423 @@
+{
+  "trial_count": 5,
+  "runs_per_matchup": 30,
+  "max_turns": 128,
+  "seed": 42,
+  "best": [
+    {
+      "params": {
+        "SECUTOR.base_def": 6,
+        "SECUTOR.base_sta": 7,
+        "SHIELD_BASH.sta_cost": 4,
+        "SHIELD_BASH.flat_damage": 1,
+        "RECOVER.sta_cost": 0
+      },
+      "score": 13.333333333333343,
+      "matchups": {
+        "RET_STARTER_vs_RET_STARTER": {
+          "inputs": {
+            "attacker_build_id": "RET_STARTER",
+            "defender_build_id": "RET_STARTER",
+            "start_seed": 7100,
+            "simulation_count": 30,
+            "max_turns": 128
+          },
+          "seeds_used": [
+            7100,
+            7101,
+            7102,
+            7103,
+            7104,
+            7105,
+            7106,
+            7107,
+            7108,
+            7109,
+            7110,
+            7111,
+            7112,
+            7113,
+            7114,
+            7115,
+            7116,
+            7117,
+            7118,
+            7119,
+            7120,
+            7121,
+            7122,
+            7123,
+            7124,
+            7125,
+            7126,
+            7127,
+            7128,
+            7129
+          ],
+          "total_runs": 30,
+          "wins": {
+            "attacker": 14,
+            "defender": 16,
+            "draws_or_unresolved": 0
+          },
+          "win_rates": {
+            "attacker_pct": 46.666666666666664,
+            "defender_pct": 53.333333333333336
+          },
+          "turn_stats": {
+            "average": 11.0,
+            "min": 7,
+            "max": 16
+          },
+          "terminal_condition_counts": {
+            "HP_ZERO": 30
+          },
+          "action_usage_counts": {
+            "BASIC_ATTACK": 193,
+            "NET_THROW": 137
+          },
+          "status_application_counts": {
+            "ENTANGLED": 105
+          }
+        },
+        "SEC_STARTER_vs_SEC_STARTER": {
+          "inputs": {
+            "attacker_build_id": "SEC_STARTER",
+            "defender_build_id": "SEC_STARTER",
+            "start_seed": 6100,
+            "simulation_count": 30,
+            "max_turns": 128
+          },
+          "seeds_used": [
+            6100,
+            6101,
+            6102,
+            6103,
+            6104,
+            6105,
+            6106,
+            6107,
+            6108,
+            6109,
+            6110,
+            6111,
+            6112,
+            6113,
+            6114,
+            6115,
+            6116,
+            6117,
+            6118,
+            6119,
+            6120,
+            6121,
+            6122,
+            6123,
+            6124,
+            6125,
+            6126,
+            6127,
+            6128,
+            6129
+          ],
+          "total_runs": 30,
+          "wins": {
+            "attacker": 16,
+            "defender": 14,
+            "draws_or_unresolved": 0
+          },
+          "win_rates": {
+            "attacker_pct": 53.333333333333336,
+            "defender_pct": 46.666666666666664
+          },
+          "turn_stats": {
+            "average": 45.43333333333333,
+            "min": 31,
+            "max": 54
+          },
+          "terminal_condition_counts": {
+            "HP_ZERO": 30
+          },
+          "action_usage_counts": {
+            "BASIC_ATTACK": 437,
+            "RECOVER": 25,
+            "SHIELD_BASH": 497
+          },
+          "status_application_counts": {
+            "STUNNED": 404
+          }
+        },
+        "RET_STARTER_vs_SEC_STARTER": {
+          "inputs": {
+            "attacker_build_id": "RET_STARTER",
+            "defender_build_id": "SEC_STARTER",
+            "start_seed": 9100,
+            "simulation_count": 30,
+            "max_turns": 128
+          },
+          "seeds_used": [
+            9100,
+            9101,
+            9102,
+            9103,
+            9104,
+            9105,
+            9106,
+            9107,
+            9108,
+            9109,
+            9110,
+            9111,
+            9112,
+            9113,
+            9114,
+            9115,
+            9116,
+            9117,
+            9118,
+            9119,
+            9120,
+            9121,
+            9122,
+            9123,
+            9124,
+            9125,
+            9126,
+            9127,
+            9128,
+            9129
+          ],
+          "total_runs": 30,
+          "wins": {
+            "attacker": 2,
+            "defender": 28,
+            "draws_or_unresolved": 0
+          },
+          "win_rates": {
+            "attacker_pct": 6.666666666666667,
+            "defender_pct": 93.33333333333333
+          },
+          "turn_stats": {
+            "average": 22.866666666666667,
+            "min": 8,
+            "max": 39
+          },
+          "terminal_condition_counts": {
+            "HP_ZERO": 30
+          },
+          "action_usage_counts": {
+            "BASIC_ATTACK": 292,
+            "NET_THROW": 120,
+            "RECOVER": 53,
+            "SHIELD_BASH": 151
+          },
+          "status_application_counts": {
+            "ENTANGLED": 114,
+            "STUNNED": 70
+          }
+        },
+        "SEC_STARTER_vs_RET_STARTER": {
+          "inputs": {
+            "attacker_build_id": "SEC_STARTER",
+            "defender_build_id": "RET_STARTER",
+            "start_seed": 8100,
+            "simulation_count": 30,
+            "max_turns": 128
+          },
+          "seeds_used": [
+            8100,
+            8101,
+            8102,
+            8103,
+            8104,
+            8105,
+            8106,
+            8107,
+            8108,
+            8109,
+            8110,
+            8111,
+            8112,
+            8113,
+            8114,
+            8115,
+            8116,
+            8117,
+            8118,
+            8119,
+            8120,
+            8121,
+            8122,
+            8123,
+            8124,
+            8125,
+            8126,
+            8127,
+            8128,
+            8129
+          ],
+          "total_runs": 30,
+          "wins": {
+            "attacker": 18,
+            "defender": 12,
+            "draws_or_unresolved": 0
+          },
+          "win_rates": {
+            "attacker_pct": 60.0,
+            "defender_pct": 40.0
+          },
+          "turn_stats": {
+            "average": 25.4,
+            "min": 12,
+            "max": 35
+          },
+          "terminal_condition_counts": {
+            "HP_ZERO": 30
+          },
+          "action_usage_counts": {
+            "BASIC_ATTACK": 341,
+            "NET_THROW": 130,
+            "RECOVER": 62,
+            "SHIELD_BASH": 163
+          },
+          "status_application_counts": {
+            "ENTANGLED": 122,
+            "STUNNED": 66
+          }
+        }
+      }
+    },
+    {
+      "params": {
+        "SECUTOR.base_def": 6,
+        "SECUTOR.base_sta": 7,
+        "SHIELD_BASH.sta_cost": 5,
+        "SHIELD_BASH.flat_damage": 2,
+        "RECOVER.sta_cost": 0
+      },
+      "score": 28.333333333333343,
+      "matchups": {
+        "RET_STARTER_vs_RET_STARTER": {
+          "inputs": {
+            "attacker_build_id": "RET_STARTER",
+            "defender_build_id": "RET_STARTER",
+            "start_seed": 7100,
+            "simulation_count": 30,
+            "max_turns": 128
+          },
+          "seeds_used": [
+            7100,
+            7101,
+            7102,
+            7103,
+            7104,
+            7105,
+            7106,
+            7107,
+            7108,
+            7109,
+            7110,
+            7111,
+            7112,
+            7113,
+            7114,
+            7115,
+            7116,
+            7117,
+            7118,
+            7119,
+            7120,
+            7121,
+            7122,
+            7123,
+            7124,
+            7125,
+            7126,
+            7127,
+            7128,
+            7129
+          ],
+          "total_runs": 30,
+          "wins": {
+            "attacker": 14,
+            "defender": 16,
+            "draws_or_unresolved": 0
+          },
+          "win_rates": {
+            "attacker_pct": 46.666666666666664,
+            "defender_pct": 53.333333333333336
+          },
+          "turn_stats": {
+            "average": 11.0,
+            "min": 7,
+            "max": 16
+          },
+          "terminal_condition_counts": {
+            "HP_ZERO": 30
+          },
+          "action_usage_counts": {
+            "BASIC_ATTACK": 193,
+            "NET_THROW": 137
+          },
+          "status_application_counts": {
+            "ENTANGLED": 105
+          }
+        },
+        "SEC_STARTER_vs_SEC_STARTER": {
+          "inputs": {
+            "attacker_build_id": "SEC_STARTER",
+            "defender_build_id": "SEC_STARTER",
+            "start_seed": 6100,
+            "simulation_count": 30,
+            "max_turns": 128
+          },
+          "seeds_used": [
+            6100,
+            6101,
+            6102,
+            6103,
+            6104,
+            6105,
+            6106,
+            6107,
+            6108,
+            6109,
+            6110,
+            6111,
+            6112,
+            6113,
+            6114,
+            6115,
+            6116,
+            6117,
+            6118,
+            6119,
+            6120,
+            6121,
+            6122,
+            6123,
+            6124,
+            6125,
+            6126,
+            6127,
+            6128,
+            6129
+          ],
+          "total_runs": 30,
+          "wins": {
+            "attacker": 16,
+            "defender": 14,
+            "draws_or_unresolved": 0
+          },
+          "win_rates": {
+            "attacker_pct": 53.333333333333336,
+            "defender_pct": 46.666666666666664
+          },
+          "turn_stats": {
+            "average": 41.96666666666667,
+            "min": 25,
+            "max": 52
+          },
+          "terminal_condition_counts": {
+            "HP_ZERO": 30
+          },
+          "action_usage_counts": {
+            "BASIC_ATTACK": 300,
+            "RECOVER": 175,
+            "SHIELD_BASH": 445
+          },
+          "status_application_counts": {
+            "STUNNED": 339
+          }
+        },
+        "RET_STARTER_vs_SEC_STARTER": {
+          "inputs": {
+            "attacker_build_id": "RET_STARTER",
+            "defender_build_id": "SEC_STARTER",
+            "start_seed": 9100,
+            "simulation_count": 30,
+            "max_turns": 128
+          },
+          "seeds_used": [
+            9100,
+            9101,
+            9102,
+            9103,
+            9104,
+            9105,
+            9106,
+            9107,
+            9108,
+            9109,
+            9110,
+            9111,
+            9112,
+            9113,
+            9114,
+            9115,
+            9116,
+            9117,
+            9118,
+            9119,
+            9120,
+            9121,
+            9122,
+            9123,
+            9124,
+            9125,
+            9126,
+            9127,
+            9128,
+            9129
+          ],
+          "total_runs": 30,
+          "wins": {
+            "attacker": 9,
+            "defender": 21,
+            "draws_or_unresolved": 0
+          },
+          "win_rates": {
+            "attacker_pct": 30.0,
+            "defender_pct": 70.0
+          },
+          "turn_stats": {
+            "average": 25.1,
+            "min": 8,
+            "max": 38
+          },
+          "terminal_condition_counts": {
+            "HP_ZERO": 30
+          },
+          "action_usage_counts": {
+            "BASIC_ATTACK": 305,
+            "NET_THROW": 142,
+            "RECOVER": 112,
+            "SHIELD_BASH": 138
+          },
+          "status_application_counts": {
+            "ENTANGLED": 132,
+            "STUNNED": 56
+          }
+        },
+        "SEC_STARTER_vs_RET_STARTER": {
+          "inputs": {
+            "attacker_build_id": "SEC_STARTER",
+            "defender_build_id": "RET_STARTER",
+            "start_seed": 8100,
+            "simulation_count": 30,
+            "max_turns": 128
+          },
+          "seeds_used": [
+            8100,
+            8101,
+            8102,
+            8103,
+            8104,
+            8105,
+            8106,
+            8107,
+            8108,
+            8109,
+            8110,
+            8111,
+            8112,
+            8113,
+            8114,
+            8115,
+            8116,
+            8117,
+            8118,
+            8119,
+            8120,
+            8121,
+            8122,
+            8123,
+            8124,
+            8125,
+            8126,
+            8127,
+            8128,
+            8129
+          ],
+          "total_runs": 30,
+          "wins": {
+            "attacker": 21,
+            "defender": 9,
+            "draws_or_unresolved": 0
+          },
+          "win_rates": {
+            "attacker_pct": 70.0,
+            "defender_pct": 30.0
+          },
+          "turn_stats": {
+            "average": 26.766666666666666,
+            "min": 14,
+            "max": 39
+          },
+          "terminal_condition_counts": {
+            "HP_ZERO": 30
+          },
+          "action_usage_counts": {
+            "BASIC_ATTACK": 327,
+            "NET_THROW": 148,
+            "RECOVER": 118,
+            "SHIELD_BASH": 146
+          },
+          "status_application_counts": {
+            "ENTANGLED": 140,
+            "STUNNED": 64
+          }
+        }
+      }
+    },
+    {
+      "params": {
+        "SECUTOR.base_def": 6,
+        "SECUTOR.base_sta": 7,
+        "SHIELD_BASH.sta_cost": 3,
+        "SHIELD_BASH.flat_damage": 1,
+        "RECOVER.sta_cost": 1
+      },
+      "score": 68.33333333333333,
+      "matchups": {
+        "RET_STARTER_vs_RET_STARTER": {
+          "inputs": {
+            "attacker_build_id": "RET_STARTER",
+            "defender_build_id": "RET_STARTER",
+            "start_seed": 7100,
+            "simulation_count": 30,
+            "max_turns": 128
+          },
+          "seeds_used": [
+            7100,
+            7101,
+            7102,
+            7103,
+            7104,
+            7105,
+            7106,
+            7107,
+            7108,
+            7109,
+            7110,
+            7111,
+            7112,
+            7113,
+            7114,
+            7115,
+            7116,
+            7117,
+            7118,
+            7119,
+            7120,
+            7121,
+            7122,
+            7123,
+            7124,
+            7125,
+            7126,
+            7127,
+            7128,
+            7129
+          ],
+          "total_runs": 30,
+          "wins": {
+            "attacker": 14,
+            "defender": 16,
+            "draws_or_unresolved": 0
+          },
+          "win_rates": {
+            "attacker_pct": 46.666666666666664,
+            "defender_pct": 53.333333333333336
+          },
+          "turn_stats": {
+            "average": 11.0,
+            "min": 7,
+            "max": 16
+          },
+          "terminal_condition_counts": {
+            "HP_ZERO": 30
+          },
+          "action_usage_counts": {
+            "BASIC_ATTACK": 193,
+            "NET_THROW": 137
+          },
+          "status_application_counts": {
+            "ENTANGLED": 105
+          }
+        },
+        "SEC_STARTER_vs_SEC_STARTER": {
+          "inputs": {
+            "attacker_build_id": "SEC_STARTER",
+            "defender_build_id": "SEC_STARTER",
+            "start_seed": 6100,
+            "simulation_count": 30,
+            "max_turns": 128
+          },
+          "seeds_used": [
+            6100,
+            6101,
+            6102,
+            6103,
+            6104,
+            6105,
+            6106,
+            6107,
+            6108,
+            6109,
+            6110,
+            6111,
+            6112,
+            6113,
+            6114,
+            6115,
+            6116,
+            6117,
+            6118,
+            6119,
+            6120,
+            6121,
+            6122,
+            6123,
+            6124,
+            6125,
+            6126,
+            6127,
+            6128,
+            6129
+          ],
+          "total_runs": 30,
+          "wins": {
+            "attacker": 16,
+            "defender": 14,
+            "draws_or_unresolved": 0
+          },
+          "win_rates": {
+            "attacker_pct": 53.333333333333336,
+            "defender_pct": 46.666666666666664
+          },
+          "turn_stats": {
+            "average": 45.43333333333333,
+            "min": 31,
+            "max": 54
+          },
+          "terminal_condition_counts": {
+            "HP_ZERO": 30
+          },
+          "action_usage_counts": {
+            "BASIC_ATTACK": 433,
+            "RECOVER": 1,
+            "SHIELD_BASH": 518
+          },
+          "status_application_counts": {
+            "STUNNED": 411
+          }
+        },
+        "RET_STARTER_vs_SEC_STARTER": {
+          "inputs": {
+            "attacker_build_id": "RET_STARTER",
+            "defender_build_id": "SEC_STARTER",
+            "start_seed": 9100,
+            "simulation_count": 30,
+            "max_turns": 128
+          },
+          "seeds_used": [
+            9100,
+            9101,
+            9102,
+            9103,
+            9104,
+            9105,
+            9106,
+            9107,
+            9108,
+            9109,
+            9110,
+            9111,
+            9112,
+            9113,
+            9114,
+            9115,
+            9116,
+            9117,
+            9118,
+            9119,
+            9120,
+            9121,
+            9122,
+            9123,
+            9124,
+            9125,
+            9126,
+            9127,
+            9128,
+            9129
+          ],
+          "total_runs": 30,
+          "wins": {
+            "attacker": 7,
+            "defender": 23,
+            "draws_or_unresolved": 0
+          },
+          "win_rates": {
+            "attacker_pct": 23.333333333333332,
+            "defender_pct": 76.66666666666667
+          },
+          "turn_stats": {
+            "average": 23.966666666666665,
+            "min": 8,
+            "max": 42
+          },
+          "terminal_condition_counts": {
+            "HP_ZERO": 30
+          },
+          "action_usage_counts": {
+            "BASIC_ATTACK": 290,
+            "NET_THROW": 127,
+            "RECOVER": 35,
+            "SHIELD_BASH": 188
+          },
+          "status_application_counts": {
+            "ENTANGLED": 117,
+            "STUNNED": 79
+          }
+        },
+        "SEC_STARTER_vs_RET_STARTER": {
+          "inputs": {
+            "attacker_build_id": "SEC_STARTER",
+            "defender_build_id": "RET_STARTER",
+            "start_seed": 8100,
+            "simulation_count": 30,
+            "max_turns": 128
+          },
+          "seeds_used": [
+            8100,
+            8101,
+            8102,
+            8103,
+            8104,
+            8105,
+            8106,
+            8107,
+            8108,
+            8109,
+            8110,
+            8111,
+            8112,
+            8113,
+            8114,
+            8115,
+            8116,
+            8117,
+            8118,
+            8119,
+            8120,
+            8121,
+            8122,
+            8123,
+            8124,
+            8125,
+            8126,
+            8127,
+            8128,
+            8129
+          ],
+          "total_runs": 30,
+          "wins": {
+            "attacker": 25,
+            "defender": 5,
+            "draws_or_unresolved": 0
+          },
+          "win_rates": {
+            "attacker_pct": 83.33333333333333,
+            "defender_pct": 16.666666666666668
+          },
+          "turn_stats": {
+            "average": 25.033333333333335,
+            "min": 12,
+            "max": 40
+          },
+          "terminal_condition_counts": {
+            "HP_ZERO": 30
+          },
+          "action_usage_counts": {
+            "BASIC_ATTACK": 310,
+            "NET_THROW": 123,
+            "RECOVER": 37,
+            "SHIELD_BASH": 194
+          },
+          "status_application_counts": {
+            "ENTANGLED": 114,
+            "STUNNED": 87
+          }
+        }
+      }
+    },
+    {
+      "params": {
+        "SECUTOR.base_def": 5,
+        "SECUTOR.base_sta": 8,
+        "SHIELD_BASH.sta_cost": 4,
+        "SHIELD_BASH.flat_damage": 2,
+        "RECOVER.sta_cost": 0
+      },
+      "score": 98.80000000000001,
+      "matchups": {
+        "RET_STARTER_vs_RET_STARTER": {
+          "inputs": {
+            "attacker_build_id": "RET_STARTER",
+            "defender_build_id": "RET_STARTER",
+            "start_seed": 7100,
+            "simulation_count": 30,
+            "max_turns": 128
+          },
+          "seeds_used": [
+            7100,
+            7101,
+            7102,
+            7103,
+            7104,
+            7105,
+            7106,
+            7107,
+            7108,
+            7109,
+            7110,
+            7111,
+            7112,
+            7113,
+            7114,
+            7115,
+            7116,
+            7117,
+            7118,
+            7119,
+            7120,
+            7121,
+            7122,
+            7123,
+            7124,
+            7125,
+            7126,
+            7127,
+            7128,
+            7129
+          ],
+          "total_runs": 30,
+          "wins": {
+            "attacker": 14,
+            "defender": 16,
+            "draws_or_unresolved": 0
+          },
+          "win_rates": {
+            "attacker_pct": 46.666666666666664,
+            "defender_pct": 53.333333333333336
+          },
+          "turn_stats": {
+            "average": 11.0,
+            "min": 7,
+            "max": 16
+          },
+          "terminal_condition_counts": {
+            "HP_ZERO": 30
+          },
+          "action_usage_counts": {
+            "BASIC_ATTACK": 193,
+            "NET_THROW": 137
+          },
+          "status_application_counts": {
+            "ENTANGLED": 105
+          }
+        },
+        "SEC_STARTER_vs_SEC_STARTER": {
+          "inputs": {
+            "attacker_build_id": "SEC_STARTER",
+            "defender_build_id": "SEC_STARTER",
+            "start_seed": 6100,
+            "simulation_count": 30,
+            "max_turns": 128
+          },
+          "seeds_used": [
+            6100,
+            6101,
+            6102,
+            6103,
+            6104,
+            6105,
+            6106,
+            6107,
+            6108,
+            6109,
+            6110,
+            6111,
+            6112,
+            6113,
+            6114,
+            6115,
+            6116,
+            6117,
+            6118,
+            6119,
+            6120,
+            6121,
+            6122,
+            6123,
+            6124,
+            6125,
+            6126,
+            6127,
+            6128,
+            6129
+          ],
+          "total_runs": 30,
+          "wins": {
+            "attacker": 19,
+            "defender": 11,
+            "draws_or_unresolved": 0
+          },
+          "win_rates": {
+            "attacker_pct": 63.333333333333336,
+            "defender_pct": 36.666666666666664
+          },
+          "turn_stats": {
+            "average": 22.266666666666666,
+            "min": 18,
+            "max": 28
+          },
+          "terminal_condition_counts": {
+            "HP_ZERO": 30
+          },
+          "action_usage_counts": {
+            "BASIC_ATTACK": 207,
+            "RECOVER": 4,
+            "SHIELD_BASH": 255
+          },
+          "status_application_counts": {
+            "STUNNED": 202
+          }
+        },
+        "RET_STARTER_vs_SEC_STARTER": {
+          "inputs": {
+            "attacker_build_id": "RET_STARTER",
+            "defender_build_id": "SEC_STARTER",
+            "start_seed": 9100,
+            "simulation_count": 30,
+            "max_turns": 128
+          },
+          "seeds_used": [
+            9100,
+            9101,
+            9102,
+            9103,
+            9104,
+            9105,
+            9106,
+            9107,
+            9108,
+            9109,
+            9110,
+            9111,
+            9112,
+            9113,
+            9114,
+            9115,
+            9116,
+            9117,
+            9118,
+            9119,
+            9120,
+            9121,
+            9122,
+            9123,
+            9124,
+            9125,
+            9126,
+            9127,
+            9128,
+            9129
+          ],
+          "total_runs": 30,
+          "wins": {
+            "attacker": 15,
+            "defender": 15,
+            "draws_or_unresolved": 0
+          },
+          "win_rates": {
+            "attacker_pct": 50.0,
+            "defender_pct": 50.0
+          },
+          "turn_stats": {
+            "average": 17.433333333333334,
+            "min": 6,
+            "max": 27
+          },
+          "terminal_condition_counts": {
+            "HP_ZERO": 30
+          },
+          "action_usage_counts": {
+            "BASIC_ATTACK": 200,
+            "NET_THROW": 95,
+            "RECOVER": 42,
+            "SHIELD_BASH": 127
+          },
+          "status_application_counts": {
+            "ENTANGLED": 87,
+            "STUNNED": 59
+          }
+        },
+        "SEC_STARTER_vs_RET_STARTER": {
+          "inputs": {
+            "attacker_build_id": "SEC_STARTER",
+            "defender_build_id": "RET_STARTER",
+            "start_seed": 8100,
+            "simulation_count": 30,
+            "max_turns": 128
+          },
+          "seeds_used": [
+            8100,
+            8101,
+            8102,
+            8103,
+            8104,
+            8105,
+            8106,
+            8107,
+            8108,
+            8109,
+            8110,
+            8111,
+            8112,
+            8113,
+            8114,
+            8115,
+            8116,
+            8117,
+            8118,
+            8119,
+            8120,
+            8121,
+            8122,
+            8123,
+            8124,
+            8125,
+            8126,
+            8127,
+            8128,
+            8129
+          ],
+          "total_runs": 30,
+          "wins": {
+            "attacker": 12,
+            "defender": 18,
+            "draws_or_unresolved": 0
+          },
+          "win_rates": {
+            "attacker_pct": 40.0,
+            "defender_pct": 60.0
+          },
+          "turn_stats": {
+            "average": 19.533333333333335,
+            "min": 8,
+            "max": 31
+          },
+          "terminal_condition_counts": {
+            "HP_ZERO": 30
+          },
+          "action_usage_counts": {
+            "BASIC_ATTACK": 238,
+            "NET_THROW": 101,
+            "RECOVER": 50,
+            "SHIELD_BASH": 139
+          },
+          "status_application_counts": {
+            "ENTANGLED": 93,
+            "STUNNED": 58
+          }
+        }
+      }
+    },
+    {
+      "params": {
+        "SECUTOR.base_def": 5,
+        "SECUTOR.base_sta": 7,
+        "SHIELD_BASH.sta_cost": 4,
+        "SHIELD_BASH.flat_damage": 0,
+        "RECOVER.sta_cost": 0
+      },
+      "score": 125.66666666666669,
+      "matchups": {
+        "RET_STARTER_vs_RET_STARTER": {
+          "inputs": {
+            "attacker_build_id": "RET_STARTER",
+            "defender_build_id": "RET_STARTER",
+            "start_seed": 7100,
+            "simulation_count": 30,
+            "max_turns": 128
+          },
+          "seeds_used": [
+            7100,
+            7101,
+            7102,
+            7103,
+            7104,
+            7105,
+            7106,
+            7107,
+            7108,
+            7109,
+            7110,
+            7111,
+            7112,
+            7113,
+            7114,
+            7115,
+            7116,
+            7117,
+            7118,
+            7119,
+            7120,
+            7121,
+            7122,
+            7123,
+            7124,
+            7125,
+            7126,
+            7127,
+            7128,
+            7129
+          ],
+          "total_runs": 30,
+          "wins": {
+            "attacker": 14,
+            "defender": 16,
+            "draws_or_unresolved": 0
+          },
+          "win_rates": {
+            "attacker_pct": 46.666666666666664,
+            "defender_pct": 53.333333333333336
+          },
+          "turn_stats": {
+            "average": 11.0,
+            "min": 7,
+            "max": 16
+          },
+          "terminal_condition_counts": {
+            "HP_ZERO": 30
+          },
+          "action_usage_counts": {
+            "BASIC_ATTACK": 193,
+            "NET_THROW": 137
+          },
+          "status_application_counts": {
+            "ENTANGLED": 105
+          }
+        },
+        "SEC_STARTER_vs_SEC_STARTER": {
+          "inputs": {
+            "attacker_build_id": "SEC_STARTER",
+            "defender_build_id": "SEC_STARTER",
+            "start_seed": 6100,
+            "simulation_count": 30,
+            "max_turns": 128
+          },
+          "seeds_used": [
+            6100,
+            6101,
+            6102,
+            6103,
+            6104,
+            6105,
+            6106,
+            6107,
+            6108,
+            6109,
+            6110,
+            6111,
+            6112,
+            6113,
+            6114,
+            6115,
+            6116,
+            6117,
+            6118,
+            6119,
+            6120,
+            6121,
+            6122,
+            6123,
+            6124,
+            6125,
+            6126,
+            6127,
+            6128,
+            6129
+          ],
+          "total_runs": 30,
+          "wins": {
+            "attacker": 14,
+            "defender": 16,
+            "draws_or_unresolved": 0
+          },
+          "win_rates": {
+            "attacker_pct": 46.666666666666664,
+            "defender_pct": 53.333333333333336
+          },
+          "turn_stats": {
+            "average": 33.833333333333336,
+            "min": 25,
+            "max": 42
+          },
+          "terminal_condition_counts": {
+            "HP_ZERO": 30
+          },
+          "action_usage_counts": {
+            "BASIC_ATTACK": 324,
+            "RECOVER": 17,
+            "SHIELD_BASH": 373
+          },
+          "status_application_counts": {
+            "STUNNED": 301
+          }
+        },
+        "RET_STARTER_vs_SEC_STARTER": {
+          "inputs": {
+            "attacker_build_id": "RET_STARTER",
+            "defender_build_id": "SEC_STARTER",
+            "start_seed": 9100,
+            "simulation_count": 30,
+            "max_turns": 128
+          },
+          "seeds_used": [
+            9100,
+            9101,
+            9102,
+            9103,
+            9104,
+            9105,
+            9106,
+            9107,
+            9108,
+            9109,
+            9110,
+            9111,
+            9112,
+            9113,
+            9114,
+            9115,
+            9116,
+            9117,
+            9118,
+            9119,
+            9120,
+            9121,
+            9122,
+            9123,
+            9124,
+            9125,
+            9126,
+            9127,
+            9128,
+            9129
+          ],
+          "total_runs": 30,
+          "wins": {
+            "attacker": 20,
+            "defender": 10,
+            "draws_or_unresolved": 0
+          },
+          "win_rates": {
+            "attacker_pct": 66.66666666666667,
+            "defender_pct": 33.333333333333336
+          },
+          "turn_stats": {
+            "average": 19.866666666666667,
+            "min": 15,
+            "max": 33
+          },
+          "terminal_condition_counts": {
+            "HP_ZERO": 30
+          },
+          "action_usage_counts": {
+            "BASIC_ATTACK": 254,
+            "NET_THROW": 107,
+            "RECOVER": 43,
+            "SHIELD_BASH": 130
+          },
+          "status_application_counts": {
+            "ENTANGLED": 98,
+            "STUNNED": 62
+          }
+        },
+        "SEC_STARTER_vs_RET_STARTER": {
+          "inputs": {
+            "attacker_build_id": "SEC_STARTER",
+            "defender_build_id": "RET_STARTER",
+            "start_seed": 8100,
+            "simulation_count": 30,
+            "max_turns": 128
+          },
+          "seeds_used": [
+            8100,
+            8101,
+            8102,
+            8103,
+            8104,
+            8105,
+            8106,
+            8107,
+            8108,
+            8109,
+            8110,
+            8111,
+            8112,
+            8113,
+            8114,
+            8115,
+            8116,
+            8117,
+            8118,
+            8119,
+            8120,
+            8121,
+            8122,
+            8123,
+            8124,
+            8125,
+            8126,
+            8127,
+            8128,
+            8129
+          ],
+          "total_runs": 30,
+          "wins": {
+            "attacker": 7,
+            "defender": 23,
+            "draws_or_unresolved": 0
+          },
+          "win_rates": {
+            "attacker_pct": 23.333333333333332,
+            "defender_pct": 76.66666666666667
+          },
+          "turn_stats": {
+            "average": 19.966666666666665,
+            "min": 13,
+            "max": 26
+          },
+          "terminal_condition_counts": {
+            "HP_ZERO": 30
+          },
+          "action_usage_counts": {
+            "BASIC_ATTACK": 271,
+            "NET_THROW": 103,
+            "RECOVER": 43,
+            "SHIELD_BASH": 127
+          },
+          "status_application_counts": {
+            "ENTANGLED": 97,
+            "STUNNED": 55
+          }
+        }
+      }
+    }
+  ]
+}
