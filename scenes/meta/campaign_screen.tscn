@@ -207,7 +207,7 @@ size_flags_vertical = 3
 
 [node name="EventLogTitle" type="Label" parent="Margin/RootVBox/ContentRow/SidePanel/EventPanel/EventMargin/EventVBox"]
 layout_mode = 2
-text = "Event Log"
+text = "Recent Events"
 
 [node name="EventLog" type="RichTextLabel" parent="Margin/RootVBox/ContentRow/SidePanel/EventPanel/EventMargin/EventVBox"]
 unique_name_in_owner = true

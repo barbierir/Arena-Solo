@@ -194,8 +194,10 @@ func _finalize_playback() -> void:
 func _build_result_text(result: Dictionary) -> String:
 	if result.has("error"):
 		return "[b]Errore combattimento[/b]\n%s" % str(result.get("error", "Errore sconosciuto"))
-	var winner_name: String = _fighter_name_from_id(str(result.get("winner_id", "")))
-	var loser_name: String = _fighter_name_from_id(str(result.get("loser_id", "")))
+	var winner_id: String = str(result.get("winner_id", ""))
+	var loser_id: String = str(result.get("loser_id", ""))
+	var winner_name: String = _fighter_name_from_id(winner_id)
+	var loser_name: String = _fighter_name_from_id(loser_id)
 	var lines: Array[String] = []
 	lines.append("[b]Risultato Finale[/b]")
 	lines.append("Vincitore: %s" % winner_name)
@@ -209,7 +211,30 @@ func _build_result_text(result: Dictionary) -> String:
 			int(reward.get("gold", 0)),
 			int(reward.get("fame", 0)),
 		])
+		var progression: Dictionary = reward.get("progression", {})
+		_append_progression_line(lines, progression, winner_id, winner_name)
+		_append_progression_line(lines, progression, loser_id, loser_name)
 	return "\n".join(lines)
+
+func _append_progression_line(lines: Array[String], progression: Dictionary, gladiator_id: String, fallback_name: String) -> void:
+	if gladiator_id == "":
+		return
+	if not progression.has(gladiator_id):
+		return
+	var info: Dictionary = progression.get(gladiator_id, {})
+	var gained_xp: int = int(info.get("xp_gained", 0))
+	var text: String = "%s: +%d XP" % [fallback_name, gained_xp]
+	var events_variant: Variant = info.get("events", [])
+	if typeof(events_variant) == TYPE_ARRAY:
+		var events: Array = events_variant as Array
+		for event_variant in events:
+			if typeof(event_variant) != TYPE_DICTIONARY:
+				continue
+			var event: Dictionary = event_variant
+			if str(event.get("type", "")) == "LEVEL_UP":
+				text += " | Level Up -> %d" % int(event.get("new_level", 0))
+				break
+	lines.append(text)
 
 func _fighter_name_from_id(gladiator_id: String) -> String:
 	if gladiator_id == "":
