@@ -80,7 +80,7 @@ func _on_recruit_sec_pressed() -> void:
 		return
 
 func _on_advance_day_pressed() -> void:
-	if not _can_use_campaign_actions():
+	if not GameManager.can_advance_day():
 		return
 	GameManager.advance_day()
 	GameManager.add_recent_event("Giorno avanzato.")
@@ -275,10 +275,12 @@ func _refresh_campaign_actions_state() -> void:
 	var narrative_blocked: bool = GameManager.has_active_narrative_event()
 	var controls_enabled: bool = _campaign_controls_enabled and campaign_running and not narrative_blocked
 	var can_fight_now: bool = controls_enabled and GameManager.can_start_fight()
+	var can_advance_day_now: bool = _campaign_controls_enabled and GameManager.can_advance_day()
 	_new_game_button.disabled = not _campaign_controls_enabled
 	_recruit_ret_button.disabled = not controls_enabled
 	_recruit_sec_button.disabled = not controls_enabled
-	_advance_day_button.disabled = not controls_enabled
+	_advance_day_button.disabled = not can_advance_day_now
+	_advance_day_button.tooltip_text = _build_advance_day_block_reason() if not can_advance_day_now else "Passa al giorno successivo."
 	_start_fight_button.disabled = not can_fight_now
 	_save_button.disabled = not controls_enabled
 	_load_button.disabled = not controls_enabled
@@ -344,6 +346,17 @@ func _resolve_narrative_choice_at(index: int) -> void:
 
 func _can_use_campaign_actions() -> bool:
 	return GameManager.is_campaign_running() and not GameManager.has_active_narrative_event()
+
+func _build_advance_day_block_reason() -> String:
+	if not _campaign_controls_enabled:
+		return "Attendi la fine del fight in corso."
+	if not GameManager.is_campaign_running():
+		return "La campagna non è in stato RUNNING."
+	if GameManager.has_active_narrative_event():
+		return "Risolvi prima l'evento narrativo attivo."
+	if GameManager.has_active_tournament():
+		return "Concludi prima il torneo attivo."
+	return "Advance Day non disponibile in questo momento."
 
 func _refresh_today_event() -> void:
 	var event_data: Dictionary = GameManager.get_current_event()
