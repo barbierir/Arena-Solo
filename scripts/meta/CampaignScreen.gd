@@ -155,7 +155,9 @@ func _on_fight_started(payload: Dictionary) -> void:
 	_is_fight_flow_active = true
 	var fighter_a: Dictionary = payload.get("fighter_a", {})
 	var fighter_b: Dictionary = payload.get("fighter_b", {})
-	GameManager.add_recent_event("Incontro avviato: %s vs %s" % [
+	var encounter_label: String = str(payload.get("encounter_label", "Arena Fight"))
+	GameManager.add_recent_event("%s: %s vs %s" % [
+		encounter_label,
 		str(fighter_a.get("nome", "A")),
 		str(fighter_b.get("nome", "B")),
 	])
@@ -286,9 +288,14 @@ func _refresh_campaign_actions_state() -> void:
 func _refresh_start_fight_button_state() -> void:
 	var event_data: Dictionary = GameManager.get_current_event()
 	var is_rest_day: bool = str(event_data.get("type", "FIGHT")) == GameManager.EVENT_TYPE_REST
+	if GameManager.has_active_tournament():
+		is_rest_day = false
 	var can_fight_now: bool = _campaign_controls_enabled and GameManager.is_campaign_running() and not GameManager.has_active_narrative_event() and GameManager.can_start_fight() and not _is_fight_flow_active
 	_start_fight_button.disabled = not can_fight_now
-	_start_fight_button.text = "No Fights Today" if is_rest_day else "Enter Arena"
+	if GameManager.has_active_tournament():
+		_start_fight_button.text = "Continue Tournament"
+	else:
+		_start_fight_button.text = "No Fights Today" if is_rest_day else "Enter Arena"
 
 func _refresh_narrative_overlay() -> void:
 	var event_data: Dictionary = GameManager.get_current_narrative_event()
@@ -346,12 +353,25 @@ func _refresh_today_event() -> void:
 	var reward_multiplier: float = float(event_data.get("reward_multiplier", 1.0))
 	var reward_bonus_percent: int = int(round((reward_multiplier - 1.0) * 100.0))
 	var risk_text: String = "Standard risk of death"
+	var type_label: String = event_type
+	if GameManager.has_active_tournament():
+		type_label = "Tournament Day"
+		event_description = "Tournament in progress. 2 matches required."
+		risk_text = "Escalating risk (final match is deadlier)"
 	if event_type == GameManager.EVENT_TYPE_HARD_FIGHT:
 		risk_text = "High risk of death"
 	elif event_type == GameManager.EVENT_TYPE_REST:
 		risk_text = "No arena death risk today"
+	elif event_type == GameManager.EVENT_TYPE_TOURNAMENT:
+		type_label = "Tournament Day"
+		event_description = "%s 2 matches required." % event_description
+		risk_text = "High sustained risk across two matches"
+	elif event_type == GameManager.EVENT_TYPE_BEAST_FIGHT:
+		type_label = "Beast Hunt"
+		event_description = "%s Dangerous animal encounter." % event_description
+		risk_text = "Dangerous animal encounter"
 	_today_event_name_value.text = event_name
-	_today_event_type_value.text = event_type
+	_today_event_type_value.text = type_label
 	_today_event_description_value.text = event_description
 	_today_event_reward_value.text = "%+d%% rewards" % reward_bonus_percent
 	_today_event_risk_value.text = risk_text
