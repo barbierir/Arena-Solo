@@ -11,6 +11,8 @@ signal daily_event_updated(event_data: Dictionary)
 signal narrative_event_updated(event_data: Dictionary)
 
 const SAVE_PATH: String = "user://savegame.json"
+const BATTLE_REPORTS_DIR: String = "user://battle_reports"
+const CAMPAIGN_LOG_PATH: String = "user://campaign_log.txt"
 
 const STATE_RUNNING: String = "running"
 const STATE_VICTORY: String = "victory"
@@ -39,8 +41,14 @@ const REWARD_EXP_SURVIVOR_LOSER: int = 3
 const LOSS_DEATH_CHANCE: float = 0.20
 const LOSS_DEATH_CHANCE_MAX: float = 0.75
 
-const INJURY_DAYS_STANDARD_LOSS: int = 2
-const INJURY_DAYS_SEVERE_LOSS: int = 3
+const INJURY_DAYS_STANDARD_LOSS: int = 4
+const INJURY_DAYS_SEVERE_LOSS: int = 5
+const DOCTOR_HEAL_AMOUNT_DAYS: int = 2
+const DOCTOR_VISIT_COST_GOLD: int = 10
+const CROWD_FAVOR_COST_GOLD: int = 5
+const CROWD_FAVOR_FAME_REWARD: int = 3
+const HARSH_TRAINING_XP_REWARD: int = 3
+const HARSH_TRAINING_INJURY_CHANCE: float = 0.25
 
 const LEVEL_CAP: int = 5
 const RECENT_EVENTS_MAX: int = 10
@@ -116,8 +124,10 @@ var _stats_resolver: BuildStatsResolver
 
 func _ready() -> void:
 	_bootstrap_content()
+	ensure_log_directories()
 
 func new_game() -> void:
+	ensure_log_directories()
 	gold = STARTING_GOLD
 	fame = STARTING_FAME
 	day = STARTING_DAY
@@ -136,6 +146,7 @@ func new_game() -> void:
 	recruit_gladiator("RET")
 	recruit_gladiator("SEC")
 	add_recent_event("Nuova campagna avviata (giorno %d)." % day)
+	append_campaign_log("Day %d - New campaign started." % day)
 	var saved: bool = save_game()
 	save_completed.emit(saved)
 	roster_updated.emit()
@@ -207,6 +218,7 @@ func advance_day() -> void:
 	if not can_advance_day():
 		return
 	day += 1
+	append_campaign_log("Day %d - Advanced to day %d." % [day - 1, day])
 	current_event = generate_daily_event()
 	current_narrative_event = generate_narrative_event()
 	heal_and_update_injuries()
@@ -248,6 +260,22 @@ func get_recent_events() -> Array[String]:
 	return recent_events.duplicate()
 
 func get_available_gladiators() -> Array[Dictionary]:
+	var available: Array[Dictionary] = []
+	for gladiator: Dictionary in roster:
+		if get_gladiator_status(gladiator) == STATUS_AVAILABLE:
+			available.append(gladiator.duplicate(true))
+	return available
+
+func get_injured_gladiators() -> Array[Dictionary]:
+	var injured: Array[Dictionary] = []
+	for gladiator: Dictionary in roster:
+		if not bool(gladiator.get("alive", true)):
+			continue
+		if int(gladiator.get("injured_days", 0)) > 0:
+			injured.append(gladiator.duplicate(true))
+	return injured
+
+func get_available_alive_gladiators() -> Array[Dictionary]:
 	var available: Array[Dictionary] = []
 	for gladiator: Dictionary in roster:
 		if get_gladiator_status(gladiator) == STATUS_AVAILABLE:
@@ -320,6 +348,7 @@ func recruit_gladiator(gladiator_class: String) -> Dictionary:
 	roster.append(gladiator)
 	next_gladiator_index += 1
 	add_recent_event("Reclutato %s." % get_gladiator_display_name(gladiator))
+	append_campaign_log("Day %d - Recruited %s (%s) for %d gold." % [day, get_gladiator_display_name(gladiator), str(gladiator.get("class", "")), recruit_cost])
 	save_game()
 	roster_updated.emit()
 	_emit_resources_updated()
@@ -388,6 +417,7 @@ func invalidate_active_tournament(reason: String = "invalid_state") -> void:
 	elif normalized_reason == "inconsistent_state":
 		reason_message = "The tournament was forfeited because tournament data was inconsistent."
 	add_recent_event(reason_message)
+	append_campaign_log("Day %d - Tournament forfeited: %s" % [day, normalized_reason])
 	save_game()
 	roster_updated.emit()
 	_emit_resources_updated()
@@ -402,15 +432,34 @@ func get_current_narrative_event() -> Dictionary:
 		return {}
 	return _sanitize_narrative_event(current_narrative_event)
 
+func can_offer_doctor_visit() -> bool:
+	return not get_injured_gladiators().is_empty()
+
+func can_offer_crowd_favor() -> bool:
+	return gold >= CROWD_FAVOR_COST_GOLD
+
+func can_offer_harsh_training() -> bool:
+	return not get_available_alive_gladiators().is_empty()
+
 func generate_narrative_event() -> Dictionary:
 	var rng: RandomNumberGenerator = RandomNumberGenerator.new()
 	rng.seed = int(hash("narrative-event-%d-%d-%d" % [day, next_gladiator_index, roster.size()]))
 	if rng.randf() >= NARRATIVE_EVENT_CHANCE:
 		return {}
-	var event_roll: int = rng.randi_range(0, 2)
-	if event_roll == 0:
+	var eligible_ids: Array[String] = []
+	if can_offer_doctor_visit():
+		eligible_ids.append(NARRATIVE_EVENT_DOCTOR_VISIT)
+	if can_offer_crowd_favor():
+		eligible_ids.append(NARRATIVE_EVENT_CROWD_FAVOR)
+	if can_offer_harsh_training():
+		eligible_ids.append(NARRATIVE_EVENT_HARSH_TRAINING)
+	if eligible_ids.is_empty():
+		return {}
+	var selected_index: int = rng.randi_range(0, eligible_ids.size() - 1)
+	var selected_event_id: String = eligible_ids[selected_index]
+	if selected_event_id == NARRATIVE_EVENT_DOCTOR_VISIT:
 		return _build_doctor_visit_event()
-	if event_roll == 1:
+	if selected_event_id == NARRATIVE_EVENT_CROWD_FAVOR:
 		return _build_crowd_favor_event()
 	return _build_harsh_training_event()
 
@@ -422,9 +471,9 @@ func can_resolve_narrative_choice(choice_id: String) -> bool:
 		return false
 	var event_id: String = str(current_narrative_event.get("id", ""))
 	if event_id == NARRATIVE_EVENT_DOCTOR_VISIT and normalized_choice == "PAY":
-		return gold >= 10
+		return gold >= DOCTOR_VISIT_COST_GOLD
 	if event_id == NARRATIVE_EVENT_CROWD_FAVOR and normalized_choice == "EXHIBITION":
-		return gold >= 5
+		return gold >= CROWD_FAVOR_COST_GOLD
 	return _choice_exists(current_narrative_event, normalized_choice)
 
 func resolve_narrative_event(choice_id: String) -> void:
@@ -464,6 +513,7 @@ func resolve_narrative_event(choice_id: String) -> void:
 		return
 
 	add_recent_event("%s — %s" % [str(event_data.get("title", "Narrative Event")), result_message])
+	append_campaign_log("Day %d - Narrative event %s resolved: %s" % [day, event_id, result_message])
 	current_narrative_event = {}
 	save_game()
 	roster_updated.emit()
@@ -670,6 +720,7 @@ func process_tournament_step(result: Dictionary) -> Dictionary:
 	var current_match: int = int(active_tournament.get("current_match", 1))
 	if not player_won:
 		add_recent_event("Tournament ended: your gladiator lost at match %d." % current_match)
+		append_campaign_log("Day %d - Tournament ended with defeat at match %d." % [day, current_match])
 		active_tournament = {}
 		locked_tournament_gladiator_id = ""
 		return {"tournament_completed": false, "player_won": false}
@@ -680,6 +731,7 @@ func process_tournament_step(result: Dictionary) -> Dictionary:
 		gold += TOURNAMENT_FINAL_GOLD_BONUS
 		fame += TOURNAMENT_FINAL_FAME_BONUS
 		add_recent_event("Tournament complete! Bonus: +%d gold, +%d fame." % [TOURNAMENT_FINAL_GOLD_BONUS, TOURNAMENT_FINAL_FAME_BONUS])
+		append_campaign_log("Day %d - Tournament completed: +%d gold, +%d fame." % [day, TOURNAMENT_FINAL_GOLD_BONUS, TOURNAMENT_FINAL_FAME_BONUS])
 		active_tournament = {}
 		locked_tournament_gladiator_id = ""
 		return {"tournament_completed": true, "player_won": true}
@@ -714,6 +766,7 @@ func resolve_fight(result: Dictionary) -> void:
 
 	var winner: Dictionary = _find_gladiator_by_id(winner_id)
 	var loser: Dictionary = _find_gladiator_by_id(loser_id)
+	var injury_applied_days: int = 0
 	if not winner.is_empty():
 		winner["wins"] = int(winner.get("wins", 0)) + 1
 	if not loser.is_empty():
@@ -722,8 +775,10 @@ func resolve_fight(result: Dictionary) -> void:
 			loser["alive"] = false
 			loser["injured_days"] = 0
 			add_recent_event("%s was slain in the arena." % get_gladiator_display_name(loser))
+			append_campaign_log("Day %d - Death: %s was slain in the arena." % [day, get_gladiator_display_name(loser)])
 		else:
-			apply_injury_from_fight(loser_id, result)
+			injury_applied_days = apply_injury_from_fight(loser_id, result)
+	result["injury_applied_days"] = injury_applied_days
 
 	var reward_summary: Dictionary = award_post_fight_rewards(winner_id, loser_id, result, active_event)
 	result["reward_summary"] = reward_summary
@@ -744,6 +799,14 @@ func resolve_fight(result: Dictionary) -> void:
 		int(result.get("turns", 0)),
 	])
 	_add_player_outcome_event(winner_id, loser_id, loser_dead, reward_summary)
+	append_campaign_log("Day %d - Fight result: %s defeated %s in %d turns (%s)." % [
+		day,
+		get_gladiator_display_name(winner) if not winner.is_empty() else winner_id,
+		get_gladiator_display_name(loser) if not loser.is_empty() else loser_id,
+		int(result.get("turns", 0)),
+		str(result.get("player_outcome", "UNKNOWN")),
+	])
+	write_battle_report(result, active_event)
 	if _event_type(active_event) == EVENT_TYPE_TOURNAMENT:
 		var tournament_step: Dictionary = process_tournament_step(result)
 		result["tournament_step"] = tournament_step
@@ -767,12 +830,14 @@ func check_end_conditions() -> void:
 	if not has_living_gladiators():
 		_set_game_state(STATE_DEFEAT)
 		add_recent_event("All your gladiators are dead.")
+		append_campaign_log("Day %d - Campaign defeat: all gladiators are dead." % day)
 		return
 	var reached_fame_target: bool = fame >= VICTORY_FAME_TARGET
 	var reached_day_target_with_survivor: bool = day >= VICTORY_DAY_TARGET and has_living_gladiators()
 	if reached_fame_target or reached_day_target_with_survivor:
 		_set_game_state(STATE_VICTORY)
 		add_recent_event("Your school has achieved glory!")
+		append_campaign_log("Day %d - Campaign victory achieved." % day)
 
 func award_post_fight_rewards(winner_id: String, loser_id: String, result: Dictionary, event_data: Dictionary = {}) -> Dictionary:
 	var player_id: String = str(result.get("player_gladiator_id", _resolve_player_gladiator_id(winner_id, loser_id)))
@@ -885,6 +950,7 @@ func process_level_ups(gladiator: Dictionary) -> Array[Dictionary]:
 		_apply_level_growth(gladiator, current_level)
 		var message: String = "%s ha raggiunto il livello %d." % [get_gladiator_display_name(gladiator), current_level]
 		add_recent_event(message)
+		append_campaign_log("Day %d - Level up: %s reached level %d." % [day, get_gladiator_display_name(gladiator), current_level])
 		events.append({
 			"type": "LEVEL_UP",
 			"message": message,
@@ -896,10 +962,10 @@ func process_level_ups(gladiator: Dictionary) -> Array[Dictionary]:
 	gladiator["esperienza"] = current_exp
 	return events
 
-func apply_injury_from_fight(gladiator_id: String, result: Dictionary) -> void:
+func apply_injury_from_fight(gladiator_id: String, result: Dictionary) -> int:
 	var gladiator: Dictionary = _find_gladiator_by_id(gladiator_id)
 	if gladiator.is_empty() or not bool(gladiator.get("alive", true)):
-		return
+		return 0
 	var injury_days: int = INJURY_DAYS_STANDARD_LOSS
 	var fight_turns: int = int(result.get("turns", 0))
 	var winner_remaining_hp: int = int(result.get("winner_remaining_hp", 0))
@@ -907,6 +973,7 @@ func apply_injury_from_fight(gladiator_id: String, result: Dictionary) -> void:
 		injury_days = INJURY_DAYS_SEVERE_LOSS
 	gladiator["injured_days"] = maxi(1, injury_days)
 	add_recent_event("%s e' ferito per %d giorni." % [get_gladiator_display_name(gladiator), injury_days])
+	return injury_days
 
 func add_recent_event(event_text: String) -> void:
 	var normalized: String = event_text.strip_edges()
@@ -915,6 +982,127 @@ func add_recent_event(event_text: String) -> void:
 	recent_events.append("Day %d - %s" % [day, normalized])
 	while recent_events.size() > RECENT_EVENTS_MAX:
 		recent_events.remove_at(0)
+
+func ensure_log_directories() -> void:
+	var error_code: int = DirAccess.make_dir_absolute(BATTLE_REPORTS_DIR)
+	if error_code != OK and error_code != ERR_ALREADY_EXISTS:
+		push_warning("GameManager.ensure_log_directories: failed to create %s (error %d)." % [BATTLE_REPORTS_DIR, error_code])
+
+func append_campaign_log(message: String) -> void:
+	var normalized: String = message.strip_edges()
+	if normalized == "":
+		return
+	ensure_log_directories()
+	var file: FileAccess = null
+	if FileAccess.file_exists(CAMPAIGN_LOG_PATH):
+		file = FileAccess.open(CAMPAIGN_LOG_PATH, FileAccess.READ_WRITE)
+		if file != null:
+			file.seek_end()
+	else:
+		file = FileAccess.open(CAMPAIGN_LOG_PATH, FileAccess.WRITE)
+	if file == null:
+		push_warning("GameManager.append_campaign_log: failed to open %s." % CAMPAIGN_LOG_PATH)
+		return
+	file.store_line(normalized)
+	file.close()
+
+func write_battle_report(result: Dictionary, event_data: Dictionary = {}) -> void:
+	ensure_log_directories()
+	var payload: Dictionary = current_fight_payload.duplicate(true)
+	var player_fighter: Dictionary = payload.get("fighter_a", {}) as Dictionary
+	var enemy_fighter: Dictionary = payload.get("fighter_b", {}) as Dictionary
+	var event_type: String = str(payload.get("event_type", _event_type(event_data)))
+	var event_name: String = str(event_data.get("name", str(payload.get("encounter_label", "Arena Fight"))))
+	var battle_index: int = battle_history.size()
+	var player_name_part: String = _sanitize_filename_component(get_gladiator_display_name(player_fighter))
+	var enemy_name_part: String = _sanitize_filename_component(get_gladiator_display_name(enemy_fighter))
+	var filename: String = "%s/day_%03d_fight_%03d_%s_vs_%s.txt" % [
+		BATTLE_REPORTS_DIR,
+		day,
+		battle_index,
+		player_name_part,
+		enemy_name_part,
+	]
+	var file: FileAccess = FileAccess.open(filename, FileAccess.WRITE)
+	if file == null:
+		push_warning("GameManager.write_battle_report: failed to open %s." % filename)
+		return
+	var lines: PackedStringArray = []
+	lines.append("Day: %d" % day)
+	lines.append("Event Type: %s" % event_type)
+	lines.append("Event Name: %s" % event_name)
+	lines.append("Player Gladiator: id=%s, name=%s, class=%s, level=%d" % [
+		str(player_fighter.get("id", "")),
+		get_gladiator_display_name(player_fighter),
+		str(player_fighter.get("class", "")),
+		int(player_fighter.get("level", player_fighter.get("livello", 1))),
+	])
+	lines.append("Enemy: id=%s, name=%s, class=%s, level=%d" % [
+		str(enemy_fighter.get("id", "")),
+		get_gladiator_display_name(enemy_fighter),
+		str(enemy_fighter.get("subtype", enemy_fighter.get("class", ""))),
+		int(enemy_fighter.get("level", enemy_fighter.get("livello", 1))),
+	])
+	lines.append("Outcome: %s" % str(result.get("player_outcome", "UNKNOWN")))
+	lines.append("Winner ID: %s" % str(result.get("winner_id", "")))
+	lines.append("Loser ID: %s" % str(result.get("loser_id", "")))
+	lines.append("Turns: %d" % int(result.get("turns", 0)))
+	lines.append("Winner Remaining HP: %d" % int(result.get("winner_remaining_hp", 0)))
+	lines.append("Loser Dead: %s" % str(bool(result.get("loser_dead", false))))
+	var reward_summary: Dictionary = result.get("reward_summary", {}) as Dictionary
+	var progression_summary: Dictionary = reward_summary.get("progression", {}) as Dictionary
+	var player_id: String = str(payload.get("player_gladiator_id", str(result.get("player_gladiator_id", ""))))
+	var player_progression: Dictionary = progression_summary.get(player_id, {}) as Dictionary
+	lines.append("Gold Reward: %d" % int(reward_summary.get("gold", 0)))
+	lines.append("Fame Reward: %d" % int(reward_summary.get("fame", 0)))
+	lines.append("XP Reward Player: %d" % int(player_progression.get("xp_gained", 0)))
+	lines.append("Injury Applied Days: %d" % int(result.get("injury_applied_days", 0)))
+	if event_type == EVENT_TYPE_TOURNAMENT:
+		lines.append("Tournament Match Index: %d" % int(payload.get("tournament_match_index", 0)))
+		lines.append("Tournament Total Matches: %d" % int(payload.get("tournament_total_matches", 0)))
+	if event_type == EVENT_TYPE_BEAST_FIGHT:
+		lines.append("Beast Subtype: %s" % str(enemy_fighter.get("subtype", "")))
+	lines.append("")
+	lines.append("Combat Log:")
+	lines.append(_combat_log_to_text(result.get("combat_log", [])))
+	file.store_string("\n".join(lines))
+	file.close()
+
+func _combat_log_to_text(raw_log: Variant) -> String:
+	if typeof(raw_log) != TYPE_ARRAY:
+		return "(combat log unavailable)"
+	var log_lines: PackedStringArray = []
+	var raw_entries: Array = raw_log as Array
+	for entry: Variant in raw_entries:
+		if typeof(entry) == TYPE_STRING:
+			log_lines.append(str(entry))
+		elif typeof(entry) == TYPE_DICTIONARY:
+			var row: Dictionary = entry as Dictionary
+			if row.has("text"):
+				log_lines.append(str(row.get("text", "")))
+			elif row.has("message"):
+				log_lines.append(str(row.get("message", "")))
+			else:
+				log_lines.append(JSON.stringify(row))
+		else:
+			log_lines.append(str(entry))
+	if log_lines.is_empty():
+		return "(combat log empty)"
+	return "\n".join(log_lines)
+
+func _sanitize_filename_component(value: String) -> String:
+	var normalized: String = value.strip_edges().to_lower().replace(" ", "_")
+	var output: String = ""
+	for i: int in range(normalized.length()):
+		var ch: String = normalized.substr(i, 1)
+		var code: int = ch.unicode_at(0)
+		var is_lowercase: bool = code >= 97 and code <= 122
+		var is_digit: bool = code >= 48 and code <= 57
+		if is_lowercase or is_digit or ch == "_":
+			output += ch
+	if output == "":
+		return "unknown"
+	return output
 
 func _bootstrap_content() -> void:
 	if _content_registry != null and _stats_resolver != null:
@@ -1301,10 +1489,10 @@ func _build_doctor_visit_event() -> Dictionary:
 	return {
 		"id": NARRATIVE_EVENT_DOCTOR_VISIT,
 		"title": "A Physician Offers His Services",
-		"description": "A physician asks for coin to improve treatment for your injured gladiators.",
+		"description": "A physician offers full treatment for all injured fighters in your ludus.",
 		"choices": [
-			{"id": "PAY", "text": "Pay 10 gold"},
-			{"id": "REFUSE", "text": "Refuse"},
+			{"id": "PAY", "text": "Pay 10 gold to treat all injured gladiators (-2 injury days each)"},
+			{"id": "REFUSE", "text": "Refuse the physician (no effect)"},
 		],
 	}
 
@@ -1312,10 +1500,10 @@ func _build_crowd_favor_event() -> Dictionary:
 	return {
 		"id": NARRATIVE_EVENT_CROWD_FAVOR,
 		"title": "The Crowd Hungers for Spectacle",
-		"description": "The crowd wants a flashy demonstration before the next official bout.",
+		"description": "The crowd demands a short exhibition before the official fights begin.",
 		"choices": [
-			{"id": "EXHIBITION", "text": "Stage a flashy exhibition (5 gold)"},
-			{"id": "SAVE", "text": "Save your money"},
+			{"id": "EXHIBITION", "text": "Stage an exhibition (-5 gold, +3 fame)"},
+			{"id": "SAVE", "text": "Refuse the request (no effect)"},
 		],
 	}
 
@@ -1325,8 +1513,8 @@ func _build_harsh_training_event() -> Dictionary:
 		"title": "A Brutal Training Regimen",
 		"description": "Your trainers propose a punishing routine to force rapid improvement.",
 		"choices": [
-			{"id": "PUSH", "text": "Push the men harder"},
-			{"id": "NORMAL", "text": "Keep training normal"},
+			{"id": "PUSH", "text": "Push the men harder (+3 XP to one available gladiator, 25% chance of +1 injury day)"},
+			{"id": "NORMAL", "text": "Keep training normal (no effect)"},
 		],
 	}
 
@@ -1386,12 +1574,12 @@ func _choice_exists(event_data: Dictionary, choice_id: String) -> bool:
 
 func _resolve_doctor_visit_choice(choice_id: String) -> String:
 	if choice_id == "REFUSE":
-		return "You decline the physician's offer."
+		return "You refused the physician. No effect."
 	if choice_id != "PAY":
 		return "Nothing changes."
-	if gold < 10:
+	if gold < DOCTOR_VISIT_COST_GOLD:
 		return ""
-	gold -= 10
+	gold -= DOCTOR_VISIT_COST_GOLD
 	var recovered_count: int = 0
 	for gladiator: Dictionary in roster:
 		if not bool(gladiator.get("alive", true)):
@@ -1399,20 +1587,20 @@ func _resolve_doctor_visit_choice(choice_id: String) -> String:
 		var injury_days: int = maxi(0, int(gladiator.get("injured_days", 0)))
 		if injury_days <= 0:
 			continue
-		gladiator["injured_days"] = maxi(0, injury_days - 1)
+		gladiator["injured_days"] = maxi(0, injury_days - DOCTOR_HEAL_AMOUNT_DAYS)
 		recovered_count += 1
-	return "You pay the physician. %d injured gladiators recover faster." % recovered_count
+	return "You paid the physician. All injured gladiators recovered 2 days faster (%d treated)." % recovered_count
 
 func _resolve_crowd_favor_choice(choice_id: String) -> String:
 	if choice_id == "SAVE":
-		return "You keep your purse closed and avoid extra expense."
+		return "You refused the crowd's request. No effect."
 	if choice_id != "EXHIBITION":
 		return "Nothing changes."
-	if gold < 5:
+	if gold < CROWD_FAVOR_COST_GOLD:
 		return ""
-	gold -= 5
-	fame += 3
-	return "The exhibition thrills the crowd: +3 fame."
+	gold -= CROWD_FAVOR_COST_GOLD
+	fame += CROWD_FAVOR_FAME_REWARD
+	return "You staged a flashy exhibition for the crowd and gained 3 fame."
 
 func _resolve_harsh_training_choice(choice_id: String) -> String:
 	if choice_id == "NORMAL":
@@ -1429,15 +1617,14 @@ func _resolve_harsh_training_choice(choice_id: String) -> String:
 	rng.seed = int(hash("harsh-training-%d-%d-%d" % [day, roster.size(), next_enemy_index]))
 	var selected_index: int = rng.randi_range(0, candidates.size() - 1)
 	var target: Dictionary = candidates[selected_index]
-	grant_experience(str(target.get("id", "")), 3)
+	grant_experience(str(target.get("id", "")), HARSH_TRAINING_XP_REWARD)
 	var injury_applied: bool = false
-	if rng.randf() < 0.25:
+	if rng.randf() < HARSH_TRAINING_INJURY_CHANCE:
 		target["injured_days"] = maxi(1, int(target.get("injured_days", 0)) + 1)
 		injury_applied = true
-	return "%s gains +3 XP%s." % [
-		get_gladiator_display_name(target),
-		" but suffers 1 day of injury" if injury_applied else "",
-	]
+	if injury_applied:
+		return "Harsh training improved %s, but left them battered (+3 XP, +1 injury day)." % get_gladiator_display_name(target)
+	return "Harsh training improved %s (+3 XP, no injury)." % get_gladiator_display_name(target)
 
 func _sanitize_multiplier(value: Variant, fallback: float) -> float:
 	var parsed: float = float(value)
