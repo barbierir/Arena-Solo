@@ -2,6 +2,9 @@ extends Control
 class_name CampaignScreen
 
 const COMBAT_ADAPTER_SCRIPT: GDScript = preload("res://scripts/combat/bridge/CampaignCombatAdapter.gd")
+const CONTENT_LOADER_SCRIPT: GDScript = preload("res://scripts/data/loaders/ContentLoader.gd")
+const COMBAT_BATCH_SIMULATOR_SCRIPT: GDScript = preload("res://scripts/combat/analysis/CombatBatchSimulator.gd")
+const BATCH_REPORTS_DIR: String = "user://batch_reports"
 
 @onready var _gold_value: Label = %GoldValue
 @onready var _fame_value: Label = %FameValue
@@ -34,8 +37,22 @@ const COMBAT_ADAPTER_SCRIPT: GDScript = preload("res://scripts/combat/bridge/Cam
 @onready var _narrative_choice_a_button: Button = %NarrativeChoiceAButton
 @onready var _narrative_choice_b_button: Button = %NarrativeChoiceBButton
 @onready var _narrative_hint: Label = %NarrativeHint
+@onready var _batch_toggle_button: Button = %BatchToggleButton
+@onready var _batch_panel_body: VBoxContainer = %BatchPanelBody
+@onready var _batch_attacker_selector: OptionButton = %BatchAttackerSelector
+@onready var _batch_defender_selector: OptionButton = %BatchDefenderSelector
+@onready var _batch_seed_input: LineEdit = %BatchSeedInput
+@onready var _batch_count_input: LineEdit = %BatchCountInput
+@onready var _batch_max_turns_input: LineEdit = %BatchMaxTurnsInput
+@onready var _batch_status_label: Label = %BatchStatusLabel
+@onready var _batch_saved_path_label: Label = %BatchSavedPathLabel
+@onready var _batch_report_dir_label: Label = %BatchReportDirLabel
 
 var _combat_adapter: CampaignCombatAdapter
+var _batch_content_loader: ContentLoader
+var _batch_content_registry: ContentRegistry
+var _batch_simulator: CombatBatchSimulator
+var _last_batch_result: Dictionary = {}
 var _is_fight_flow_active: bool = false
 var _campaign_controls_enabled: bool = true
 var _roster_ids_by_index: Array[String] = []
@@ -53,6 +70,7 @@ func _ready() -> void:
 	GameManager.recent_events_updated.connect(_on_recent_events_updated)
 	GameManager.daily_event_updated.connect(_on_daily_event_updated)
 	GameManager.narrative_event_updated.connect(_on_narrative_event_updated)
+	_setup_batch_harness()
 	if not GameManager.load_game():
 		GameManager.new_game()
 	_refresh_all()
@@ -129,10 +147,127 @@ func _on_load_pressed() -> void:
 		GameManager.add_recent_event("Nessun save valido. Creata una nuova partita.")
 		_refresh_recent_events()
 
+func _on_batch_toggle_pressed() -> void:
+	_batch_panel_body.visible = not _batch_panel_body.visible
+	_batch_toggle_button.text = "Hide Batch Simulator" if _batch_panel_body.visible else "Show Batch Simulator"
+
+func _on_run_batch_pressed() -> void:
+	if _batch_simulator == null:
+		_set_batch_status("Batch simulator unavailable.", false)
+		return
+	var attacker_build_id: String = _selected_batch_build_id(_batch_attacker_selector)
+	var defender_build_id: String = _selected_batch_build_id(_batch_defender_selector)
+	if attacker_build_id == "" or defender_build_id == "":
+		_set_batch_status("Pick attacker and defender builds.", false)
+		return
+	var result: Dictionary = _batch_simulator.run_batch(
+		attacker_build_id,
+		defender_build_id,
+		_parse_positive_int(_batch_seed_input.text, 1001, 0),
+		_parse_positive_int(_batch_count_input.text, 1000, 1),
+		_parse_positive_int(_batch_max_turns_input.text, 128, 1)
+	)
+	_last_batch_result = result
+	var wins: Dictionary = result.get("wins", {})
+	var total_runs: int = int(result.get("total_runs", 0))
+	_set_batch_status("Batch complete: A wins %d, B wins %d, draws %d (runs %d)." % [
+		int(wins.get("attacker", 0)),
+		int(wins.get("defender", 0)),
+		int(wins.get("draws_or_unresolved", 0)),
+		total_runs,
+	], true)
+
+func _on_save_batch_report_pressed() -> void:
+	if _batch_simulator == null:
+		_set_batch_status("Batch simulator unavailable.", false)
+		return
+	if _last_batch_result.is_empty():
+		_set_batch_status("Run a batch before saving.", false)
+		return
+	var save_outcome: Dictionary = _batch_simulator.save_batch_report(_last_batch_result, _batch_build_entries())
+	if not bool(save_outcome.get("ok", false)):
+		_set_batch_status("Save failed: %s" % str(save_outcome.get("error", "unknown error")), false)
+		return
+	var txt_path: String = str(save_outcome.get("txt_path", ""))
+	var json_path: String = str(save_outcome.get("json_path", ""))
+	_set_batch_status("Batch report saved.", true)
+	_batch_saved_path_label.text = "Last Saved: %s | %s" % [txt_path, json_path]
+
+func _on_run_canonical_suite_pressed() -> void:
+	if _batch_simulator == null:
+		_set_batch_status("Batch simulator unavailable.", false)
+		return
+	var suite_outcome: Dictionary = _batch_simulator.save_standard_suite_reports(
+		_parse_positive_int(_batch_seed_input.text, 6100, 0),
+		_parse_positive_int(_batch_count_input.text, 1000, 1),
+		_parse_positive_int(_batch_max_turns_input.text, 128, 1),
+		_batch_build_entries()
+	)
+	if not bool(suite_outcome.get("ok", false)):
+		_set_batch_status("Suite failed: %s" % str(suite_outcome.get("error", "unknown error")), false)
+		return
+	_set_batch_status("Canonical suite saved (RET/SEC mirror + cross matchups).", true)
+	_batch_saved_path_label.text = "Suite Summary: %s" % str(suite_outcome.get("summary_path", ""))
+
 func _on_resources_updated(gold: int, fame: int, day: int) -> void:
 	_gold_value.text = str(gold)
 	_fame_value.text = str(fame)
 	_day_value.text = GameManager.format_phase_progress(day)
+
+func _setup_batch_harness() -> void:
+	_batch_panel_body.visible = false
+	_batch_toggle_button.text = "Show Batch Simulator"
+	_batch_report_dir_label.text = "Reports Dir: %s" % ProjectSettings.globalize_path(BATCH_REPORTS_DIR)
+	_batch_saved_path_label.text = "Last Saved: (none)"
+	_batch_content_loader = CONTENT_LOADER_SCRIPT.new()
+	_batch_content_registry = _batch_content_loader.load_all_definitions()
+	_batch_simulator = COMBAT_BATCH_SIMULATOR_SCRIPT.new()
+	_batch_simulator.configure(_batch_content_registry)
+	_populate_batch_build_selectors(_batch_build_entries())
+	_set_batch_status("Ready. Batch simulator is isolated from campaign saves.", true)
+
+func _populate_batch_build_selectors(build_entries: Dictionary) -> void:
+	_batch_attacker_selector.clear()
+	_batch_defender_selector.clear()
+	var build_ids: Array[String] = []
+	for build_id_variant in build_entries.keys():
+		build_ids.append(str(build_id_variant))
+	build_ids.sort()
+	for build_id in build_ids:
+		var entry: Dictionary = build_entries.get(build_id, {})
+		var label: String = "%s (%s)" % [str(entry.get("display_name", build_id)), build_id]
+		_batch_attacker_selector.add_item(label)
+		_batch_attacker_selector.set_item_metadata(_batch_attacker_selector.item_count - 1, build_id)
+		_batch_defender_selector.add_item(label)
+		_batch_defender_selector.set_item_metadata(_batch_defender_selector.item_count - 1, build_id)
+	_select_batch_build(_batch_attacker_selector, "RET_STARTER")
+	_select_batch_build(_batch_defender_selector, "SEC_STARTER")
+
+func _batch_build_entries() -> Dictionary:
+	if _batch_content_registry == null:
+		return {}
+	return _batch_content_registry.builds.get("entries", {})
+
+func _set_batch_status(message: String, success: bool) -> void:
+	_batch_status_label.text = "Batch Status: %s" % message
+	_batch_status_label.modulate = Color(0.6, 0.95, 0.6) if success else Color(1.0, 0.65, 0.65)
+
+func _selected_batch_build_id(selector: OptionButton) -> String:
+	if selector.selected < 0:
+		return ""
+	return str(selector.get_item_metadata(selector.selected))
+
+func _select_batch_build(selector: OptionButton, build_id: String) -> void:
+	for idx in range(selector.item_count):
+		if str(selector.get_item_metadata(idx)) == build_id:
+			selector.select(idx)
+			return
+
+func _parse_positive_int(value: String, fallback: int, minimum: int) -> int:
+	var parsed: int = int(value)
+	if parsed < minimum:
+		return fallback
+	return parsed
 
 func _on_roster_updated() -> void:
 	_render_roster()
