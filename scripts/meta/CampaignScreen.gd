@@ -102,6 +102,12 @@ func _on_roster_list_item_selected(index: int) -> void:
 	if index < 0 or index >= _roster_ids_by_index.size():
 		return
 	var gladiator_id: String = _roster_ids_by_index[index]
+	var locked_tournament_gladiator_id: String = GameManager.get_locked_tournament_gladiator_id()
+	if locked_tournament_gladiator_id != "" and gladiator_id != locked_tournament_gladiator_id:
+		GameManager.add_recent_event("Tournament lock active: continue with the locked gladiator.")
+		_refresh_recent_events()
+		_refresh_selected_fighter()
+		return
 	if not GameManager.set_selected_gladiator(gladiator_id):
 		GameManager.add_recent_event("Selezione non valida: %s." % gladiator_id)
 		_refresh_recent_events()
@@ -285,7 +291,8 @@ func _refresh_campaign_actions_state() -> void:
 	_save_button.disabled = not controls_enabled
 	_load_button.disabled = not controls_enabled
 	_roster_list.select_mode = ItemList.SELECT_SINGLE
-	_roster_list.mouse_filter = Control.MOUSE_FILTER_STOP if controls_enabled else Control.MOUSE_FILTER_IGNORE
+	var roster_select_enabled: bool = controls_enabled and not GameManager.is_tournament_fighter_locked()
+	_roster_list.mouse_filter = Control.MOUSE_FILTER_STOP if roster_select_enabled else Control.MOUSE_FILTER_IGNORE
 
 func _refresh_start_fight_button_state() -> void:
 	var event_data: Dictionary = GameManager.get_current_event()
@@ -294,6 +301,9 @@ func _refresh_start_fight_button_state() -> void:
 	if has_tournament and not GameManager.can_continue_active_tournament():
 		GameManager.invalidate_active_tournament("no_gladiator_can_continue")
 		has_tournament = false
+	var can_continue_tournament: bool = has_tournament and GameManager.can_continue_active_tournament()
+	if has_tournament:
+		has_tournament = can_continue_tournament
 	if has_tournament:
 		is_rest_day = false
 	var can_fight_now: bool = _campaign_controls_enabled and GameManager.is_campaign_running() and not GameManager.has_active_narrative_event() and GameManager.can_start_fight() and not _is_fight_flow_active
@@ -396,6 +406,9 @@ func _refresh_today_event() -> void:
 	_today_event_risk_value.text = risk_text
 
 func _refresh_selected_fighter() -> void:
+	var locked_tournament_gladiator_id: String = GameManager.get_locked_tournament_gladiator_id()
+	if locked_tournament_gladiator_id != "":
+		GameManager.set_selected_gladiator(locked_tournament_gladiator_id)
 	var selected: Dictionary = GameManager.get_selected_gladiator()
 	if selected.is_empty():
 		var available: Array[Dictionary] = GameManager.get_available_gladiators()

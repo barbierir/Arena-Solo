@@ -102,9 +102,14 @@ var battle_history: Array[Dictionary] = []
 var recent_events: Array[String] = []
 var game_state: String = STATE_RUNNING
 var selected_gladiator_id: String = ""
+var locked_tournament_gladiator_id: String = ""
 var current_event: Dictionary = {}
 var current_narrative_event: Dictionary = {}
 var active_tournament: Dictionary = {}
+var current_fight_payload: Dictionary = {}
+var active_encounter: Dictionary = {}
+var pending_match: Dictionary = {}
+var fight_in_progress: bool = false
 
 var _content_registry: ContentRegistry
 var _stats_resolver: BuildStatsResolver
@@ -119,12 +124,14 @@ func new_game() -> void:
 	next_gladiator_index = 1
 	next_enemy_index = 1
 	selected_gladiator_id = ""
+	locked_tournament_gladiator_id = ""
 	roster.clear()
 	battle_history.clear()
 	recent_events.clear()
 	current_event = generate_daily_event()
 	current_narrative_event = {}
 	active_tournament = {}
+	clear_active_encounter_state(false)
 	_set_game_state(STATE_RUNNING)
 	recruit_gladiator("RET")
 	recruit_gladiator("SEC")
@@ -177,6 +184,7 @@ func save_game() -> bool:
 		"next_enemy_index": next_enemy_index,
 		"game_state": game_state,
 		"selected_gladiator_id": selected_gladiator_id,
+		"locked_tournament_gladiator_id": locked_tournament_gladiator_id,
 		"roster": roster,
 		"battle_history": battle_history,
 		"recent_events": recent_events,
@@ -224,6 +232,14 @@ func can_advance_day() -> bool:
 			return true
 		return false
 	return true
+
+func is_tournament_fighter_locked() -> bool:
+	return has_active_tournament() and can_continue_active_tournament() and locked_tournament_gladiator_id != ""
+
+func get_locked_tournament_gladiator_id() -> String:
+	if not is_tournament_fighter_locked():
+		return ""
+	return locked_tournament_gladiator_id
 
 func get_roster() -> Array[Dictionary]:
 	return roster.duplicate(true)
@@ -326,9 +342,13 @@ func has_active_tournament() -> bool:
 func can_continue_active_tournament() -> bool:
 	if not has_active_tournament():
 		return false
-	var gladiator_id: String = str(active_tournament.get("gladiator_id", "")).strip_edges()
+	var gladiator_id: String = locked_tournament_gladiator_id.strip_edges()
+	if gladiator_id == "":
+		gladiator_id = str(active_tournament.get("gladiator_id", "")).strip_edges()
 	if gladiator_id == "":
 		return false
+	if locked_tournament_gladiator_id != gladiator_id:
+		locked_tournament_gladiator_id = gladiator_id
 	var total_matches: int = int(active_tournament.get("total_matches", TOURNAMENT_MATCH_COUNT))
 	var current_match: int = int(active_tournament.get("current_match", 1))
 	if total_matches <= 0:
@@ -353,6 +373,7 @@ func invalidate_active_tournament(reason: String = "invalid_state") -> void:
 	if normalized_reason == "":
 		normalized_reason = "invalid_state"
 	active_tournament = {}
+	locked_tournament_gladiator_id = ""
 	if _event_type(current_event) == EVENT_TYPE_TOURNAMENT:
 		current_event = _build_fight_event()
 	var reason_message: String = "The tournament was forfeited because no gladiator could continue."
@@ -497,6 +518,8 @@ func start_next_fight() -> Dictionary:
 		return {"error": "No available gladiators"}
 
 	var player_fighter: Dictionary = get_selected_gladiator()
+	if has_active_tournament() and can_continue_active_tournament():
+		player_fighter = _find_gladiator_by_id(locked_tournament_gladiator_id).duplicate(true)
 	if player_fighter.is_empty():
 		var available: Array[Dictionary] = get_available_gladiators()
 		if available.is_empty():
@@ -528,6 +551,7 @@ func start_next_fight() -> Dictionary:
 	if has_active_tournament():
 		tournament_match_index = int(active_tournament.get("current_match", 1))
 	_set_game_state(STATE_PREPARING_FIGHT)
+	fight_in_progress = true
 	var payload: Dictionary = {
 		"day": day,
 		"seed": _build_match_seed(player_fighter, enemy_fighter),
@@ -542,6 +566,16 @@ func start_next_fight() -> Dictionary:
 		"enemy_kind": "BEAST" if bool(enemy_fighter.get("is_beast", false)) else "GLADIATOR",
 		"tournament_match_index": tournament_match_index,
 		"tournament_total_matches": TOURNAMENT_MATCH_COUNT if has_active_tournament() else 0,
+	}
+	current_fight_payload = payload.duplicate(true)
+	active_encounter = {
+		"event_type": active_event_type,
+		"player_gladiator_id": str(player_fighter.get("id", "")),
+		"enemy_gladiator_id": str(enemy_fighter.get("id", "")),
+	}
+	pending_match = {
+		"event_type": active_event_type,
+		"tournament_match_index": tournament_match_index,
 	}
 	fight_started.emit(payload)
 	_set_game_state(STATE_IN_FIGHT)
@@ -623,6 +657,7 @@ func start_tournament(gladiator: Dictionary) -> Dictionary:
 		"wins": 0,
 		"carry_over_hp": int(gladiator.get("max_hp", 1)),
 	}
+	locked_tournament_gladiator_id = gladiator_id
 	add_recent_event("Tournament started for %s (Match 1/%d)." % [get_gladiator_display_name(gladiator), TOURNAMENT_MATCH_COUNT])
 	return active_tournament.duplicate(true)
 
@@ -636,6 +671,7 @@ func process_tournament_step(result: Dictionary) -> Dictionary:
 	if not player_won:
 		add_recent_event("Tournament ended: your gladiator lost at match %d." % current_match)
 		active_tournament = {}
+		locked_tournament_gladiator_id = ""
 		return {"tournament_completed": false, "player_won": false}
 	var carried_hp: int = maxi(0, int(result.get("winner_remaining_hp", 0)) + TOURNAMENT_BETWEEN_MATCH_RECOVERY_HP)
 	active_tournament["carry_over_hp"] = carried_hp
@@ -645,6 +681,7 @@ func process_tournament_step(result: Dictionary) -> Dictionary:
 		fame += TOURNAMENT_FINAL_FAME_BONUS
 		add_recent_event("Tournament complete! Bonus: +%d gold, +%d fame." % [TOURNAMENT_FINAL_GOLD_BONUS, TOURNAMENT_FINAL_FAME_BONUS])
 		active_tournament = {}
+		locked_tournament_gladiator_id = ""
 		return {"tournament_completed": true, "player_won": true}
 	active_tournament["current_match"] = current_match + 1
 	add_recent_event("Tournament progress: Final Match unlocked (Match %d/%d)." % [int(active_tournament.get("current_match", 2)), TOURNAMENT_MATCH_COUNT])
@@ -655,6 +692,7 @@ func abort_active_fight(reason: String = "") -> void:
 		return
 	if reason != "":
 		push_warning("GameManager.abort_active_fight called: %s" % reason)
+	clear_active_encounter_state(true)
 	_set_game_state(STATE_RUNNING)
 
 func resolve_fight(result: Dictionary) -> void:
@@ -662,6 +700,7 @@ func resolve_fight(result: Dictionary) -> void:
 		invalidate_active_tournament("no_gladiator_can_continue")
 	if not _result_has_required_fields(result):
 		push_error("GameManager.resolve_fight: incomplete result payload: %s" % JSON.stringify(result))
+		clear_active_encounter_state(true)
 		_set_game_state(STATE_RUNNING)
 		return
 
@@ -710,6 +749,8 @@ func resolve_fight(result: Dictionary) -> void:
 		result["tournament_step"] = tournament_step
 		if has_active_tournament() and not can_continue_active_tournament():
 			invalidate_active_tournament("gladiator_unavailable")
+	var keep_tournament_lock: bool = has_active_tournament() and can_continue_active_tournament()
+	clear_active_encounter_state(keep_tournament_lock)
 	check_end_conditions()
 
 	save_game()
@@ -1081,6 +1122,7 @@ func _apply_loaded_data(data: Dictionary) -> void:
 	next_gladiator_index = int(data.get("next_gladiator_index", 1))
 	next_enemy_index = int(data.get("next_enemy_index", 1))
 	selected_gladiator_id = str(data.get("selected_gladiator_id", ""))
+	locked_tournament_gladiator_id = str(data.get("locked_tournament_gladiator_id", ""))
 	roster = _sanitize_roster(data.get("roster", []))
 	if not _find_gladiator_by_id(selected_gladiator_id).is_empty():
 		var selected: Dictionary = _find_gladiator_by_id(selected_gladiator_id)
@@ -1093,8 +1135,11 @@ func _apply_loaded_data(data: Dictionary) -> void:
 	current_event = _sanitize_event(data.get("current_event", {}))
 	current_narrative_event = _sanitize_narrative_event(data.get("current_narrative_event", {}))
 	active_tournament = _sanitize_tournament_state(data.get("active_tournament", {}))
+	if has_active_tournament() and locked_tournament_gladiator_id == "":
+		locked_tournament_gladiator_id = str(active_tournament.get("gladiator_id", ""))
 	if has_active_tournament() and not can_continue_active_tournament():
 		invalidate_active_tournament("inconsistent_state")
+	clear_active_encounter_state(has_active_tournament())
 	game_state = _sanitize_game_state(data.get("game_state", STATE_RUNNING))
 	if current_event.is_empty():
 		current_event = generate_daily_event()
@@ -1407,6 +1452,16 @@ func _get_effective_fight_event() -> Dictionary:
 	if has_active_tournament():
 		return _build_tournament_event()
 	return get_current_event()
+
+func clear_active_encounter_state(keep_tournament_lock: bool = false) -> void:
+	current_fight_payload = {}
+	active_encounter = {}
+	pending_match = {}
+	fight_in_progress = false
+	if not keep_tournament_lock:
+		locked_tournament_gladiator_id = ""
+		if _event_type(current_event) == EVENT_TYPE_TOURNAMENT:
+			current_event = _build_fight_event()
 
 func _is_rest_event(event_data: Dictionary) -> bool:
 	return _event_type(event_data) == EVENT_TYPE_REST
