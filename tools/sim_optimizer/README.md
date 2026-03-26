@@ -64,7 +64,7 @@ Purpose:
 
 File location:
 
-- `tools/sim_optimizer/matchup_modifiers.json`
+- `data/definitions/matchup_modifiers.json` (shared with Godot runtime)
 
 Supported modifiers (current scope only):
 
@@ -72,7 +72,6 @@ Supported modifiers (current scope only):
 - `defender_bonus_hp` – applied to defender's starting HP only
 - `both_bonus_hp` – applied to both combatants' starting HP
 - `global_damage_multiplier` – multiplies final damage after normal damage/crit math
-- `recover_value_multiplier` – scales `RECOVER` stamina gain only
 
 If a matchup key is missing, no modifiers are applied for that matchup.
 
@@ -82,9 +81,6 @@ Example config:
 {
   "RET_STARTER_vs_RET_STARTER": {
     "global_damage_multiplier": 0.9
-  },
-  "SEC_STARTER_vs_SEC_STARTER": {
-    "recover_value_multiplier": 0.8
   },
   "RET_STARTER_vs_SEC_STARTER": {
     "attacker_bonus_hp": 1
@@ -97,7 +93,7 @@ Example config:
 
 How to tweak:
 
-1. Edit/add matchup keys in `tools/sim_optimizer/matchup_modifiers.json`.
+1. Edit/add matchup keys in `data/definitions/matchup_modifiers.json`.
 2. Re-run `simulate`, `optimize`, or `validate` normally (modifiers apply automatically).
 3. Use `--verbose` to print active modifiers and confirm the applied map.
 
@@ -172,7 +168,7 @@ Known differences:
 
 1. RNG generator is Python `random.Random`, not Godot `RandomNumberGenerator`; exact per-seed event stream will differ.
 2. Validation references are external runtime artifacts; this repo currently does not include historical Godot batch JSON outputs by default.
-3. Current aggregate metrics are intentionally lighter than full Godot `CombatBatchSimulator` fighter telemetry, but preserve high-signal balance KPIs.
+3. The simulator now emits richer aggregate metrics and pathology indicators, but it still does not emulate Godot RNG internals exactly.
 
 ## Example artifacts
 
@@ -181,3 +177,39 @@ Known differences:
 - `sample_optimizer_output.json`
 
 Generated with small run counts for quick inspection.
+
+
+## New reporting and workflow commands
+
+Run full suite:
+
+```bash
+python -m tools.sim_optimizer.cli suite --preset standard --seed 6100
+```
+
+Run a single matchup with thresholds/overrides:
+
+```bash
+python -m tools.sim_optimizer.cli simulate --attacker SEC_STARTER --defender RET_STARTER --preset deep --long-fight-threshold 80 --stun-lock-threshold 4 --modifier-overrides my_modifier_overrides.json
+```
+
+Compare multiple variants (baseline + tweaks):
+
+```bash
+python -m tools.sim_optimizer.cli compare --config tools/sim_optimizer/example_compare_config.json --preset standard
+```
+
+Presets:
+
+- `smoke`: fast check
+- `standard`: balance iteration default
+- `deep`: high sample size
+
+Key metrics include:
+
+- win rates (attacker/defender/draw)
+- turns (average/median/min/max)
+- per-fighter action usage (`SHIELD_BASH`, `NET_THROW`, `RECOVER`)
+- stun/entangle/off-balance/focused consumptions
+- crit and miss rates
+- pathology indicators (stun chains, stun-heavy fights, long fights, quick fights, high-HP winners)
