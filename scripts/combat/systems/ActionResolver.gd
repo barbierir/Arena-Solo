@@ -86,7 +86,6 @@ func resolve_turn(runtime_state: CombatRuntimeState, actor_id: String) -> void:
 		_append_end_of_turn_telemetry(runtime_state, actor, target, statuses, skip_dot)
 		return
 	actor.was_stunned_last_turn = false
-	actor.consecutive_stun_attempts_received = 0
 
 	var skill_id: String = _choose_action(actor, target, runtime_state)
 	var skill: Dictionary = skills.get(skill_id, skills.get("BASIC_ATTACK", {}))
@@ -124,17 +123,18 @@ func _execute_action(runtime_state: CombatRuntimeState, actor: CombatantRuntimeS
 
 	if skill_id == "RECOVER":
 		var recovered: int = _stamina_system.recover(actor, controls)
-		var cleansed_status: String = ""
+		var removed_negative_status: String = ""
 		if _status_system.remove_status(actor, "STUNNED"):
-			cleansed_status = "STUNNED"
+			removed_negative_status = "STUNNED"
 		elif _status_system.remove_status(actor, "ENTANGLED"):
-			cleansed_status = "ENTANGLED"
-		actor.focused_hit_bonus_pct = float(controls.get("recover_focus_hit_bonus_pct", 0.10))
-		var recover_log: String = "%s uses Recover and restores %d STA." % [actor.display_name, recovered]
-		if cleansed_status != "":
-			recover_log += " Cleansed %s." % cleansed_status
-		recover_log += " Gains Focused (+%d%% hit on next action)." % int(round(actor.focused_hit_bonus_pct * 100.0))
-		runtime_state.append_log(recover_log)
+			removed_negative_status = "ENTANGLED"
+		runtime_state.append_log("%s uses Recover and restores %d STA." % [actor.display_name, recovered])
+		if removed_negative_status != "":
+			runtime_state.append_log("Recover removes %s." % removed_negative_status)
+			actor.focused_hit_bonus_pct = 0.0
+		else:
+			actor.focused_hit_bonus_pct = float(controls.get("recover_focus_hit_bonus_pct", 0.10))
+			runtime_state.append_log("Recover grants Focused.")
 		runtime_state.append_event("ACTION_USED", {
 			"actor_side_id": actor.combatant_id,
 			"actor_build_id": actor.build_id,
@@ -182,14 +182,19 @@ func _execute_action(runtime_state: CombatRuntimeState, actor: CombatantRuntimeS
 		return
 
 	var base_damage: int = _damage_system.calculate_base_damage(actor, target, skill, controls, status_defs)
+	if skill_id == "BASIC_ATTACK" and actor.off_balance_damage_penalty <= 0:
+		base_damage += 1
 	if _is_finisher_window(target):
 		base_damage += int(controls.get("finisher_pressure_bonus_damage", 1))
 		runtime_state.append_log("Finisher pressure +1 damage.")
 	if actor.off_balance_damage_penalty > 0:
 		base_damage = maxi(int(controls.get("min_damage", 1)), base_damage - actor.off_balance_damage_penalty)
-		runtime_state.append_log("%s is Off-Balance: -%d damage." % [actor.display_name, actor.off_balance_damage_penalty])
+		runtime_state.append_log("Off-Balance reduces damage by 1.")
 		actor.off_balance_damage_penalty = 0
 	var crit_chance: float = _hit_chance_system.calculate_crit(actor, skill, controls)
+	if skill_id == "SHIELD_BASH" and target.has_status("ENTANGLED"):
+		crit_chance = 0.0
+		runtime_state.append_log("Shield Bash cannot crit due to Entangled.")
 	var resolved: Dictionary = _damage_system.resolve_damage(base_damage, crit_chance, float(controls.get("crit_multiplier", 2.0)), _rng_service, runtime_state.matchup_modifiers)
 	var damage: int = int(resolved.damage)
 	target.current_hp = maxi(0, target.current_hp - damage)
@@ -252,27 +257,12 @@ func _execute_action(runtime_state: CombatRuntimeState, actor: CombatantRuntimeS
 	_set_cooldown(actor, skill_id, skill)
 
 func _resolve_stun_application(target: CombatantRuntimeState, status_id: String, turns: int, source_skill_id: String, status_defs: Dictionary) -> Dictionary:
-	var chain_attempt: int = 1
 	if target.was_stunned_last_turn:
-		target.consecutive_stun_attempts_received += 1
-		chain_attempt = target.consecutive_stun_attempts_received
-	else:
-		target.consecutive_stun_attempts_received = 1
-		chain_attempt = 1
-	if chain_attempt >= 3:
 		return {
 			"applied": false,
 			"duration_turns": 0,
-			"log_message": "%s gains temporary stun resistance. %s resisted repeated stun." % [target.display_name, target.display_name],
+			"log_message": "%s resists stun due to recent recovery." % target.display_name,
 		}
-	if chain_attempt == 2:
-		var roll: float = _rng_service.randf()
-		if roll > 0.5:
-			return {
-				"applied": false,
-				"duration_turns": 0,
-				"log_message": "%s resisted repeated stun." % target.display_name,
-			}
 	_status_system.apply_status(target, status_id, turns, source_skill_id, status_defs)
 	return {
 		"applied": true,
