@@ -47,10 +47,14 @@ const RECENT_EVENTS_MAX: int = 10
 const EVENT_TYPE_FIGHT: String = "FIGHT"
 const EVENT_TYPE_HARD_FIGHT: String = "HARD_FIGHT"
 const EVENT_TYPE_REST: String = "REST"
+const EVENT_TYPE_TOURNAMENT: String = "TOURNAMENT"
+const EVENT_TYPE_BEAST_FIGHT: String = "BEAST_FIGHT"
 
-const EVENT_FIGHT_WEIGHT: float = 0.60
-const EVENT_HARD_FIGHT_WEIGHT: float = 0.25
-const EVENT_REST_WEIGHT: float = 0.15
+const EVENT_FIGHT_WEIGHT: float = 0.50
+const EVENT_HARD_FIGHT_WEIGHT: float = 0.20
+const EVENT_REST_WEIGHT: float = 0.10
+const EVENT_TOURNAMENT_WEIGHT: float = 0.10
+const EVENT_BEAST_FIGHT_WEIGHT: float = 0.10
 
 const EVENT_FIGHT_REWARD_MULTIPLIER: float = 1.0
 const EVENT_FIGHT_RISK_MODIFIER: float = 1.0
@@ -58,6 +62,20 @@ const EVENT_HARD_FIGHT_REWARD_MULTIPLIER: float = 1.5
 const EVENT_HARD_FIGHT_RISK_MODIFIER: float = 1.5
 const EVENT_REST_REWARD_MULTIPLIER: float = 0.0
 const EVENT_REST_RISK_MODIFIER: float = 0.0
+const EVENT_TOURNAMENT_REWARD_MULTIPLIER: float = 1.0
+const EVENT_TOURNAMENT_RISK_MODIFIER: float = 1.2
+const EVENT_BEAST_REWARD_MULTIPLIER: float = 1.5
+const EVENT_BEAST_RISK_MODIFIER: float = 1.3
+const EVENT_BEAST_FAME_BONUS: int = 2
+const TOURNAMENT_MATCH_COUNT: int = 2
+const TOURNAMENT_FINAL_GOLD_BONUS: int = 30
+const TOURNAMENT_FINAL_FAME_BONUS: int = 10
+const TOURNAMENT_FINAL_RISK_MULTIPLIER: float = 1.25
+const TOURNAMENT_BETWEEN_MATCH_RECOVERY_HP: int = 0
+
+const BEAST_TYPE_WOLF: String = "WOLF"
+const BEAST_TYPE_BOAR: String = "BOAR"
+const BEAST_TYPE_LION: String = "LION"
 const NARRATIVE_EVENT_CHANCE: float = 0.25
 
 const NARRATIVE_EVENT_DOCTOR_VISIT: String = "DOCTOR_VISIT"
@@ -86,6 +104,7 @@ var game_state: String = STATE_RUNNING
 var selected_gladiator_id: String = ""
 var current_event: Dictionary = {}
 var current_narrative_event: Dictionary = {}
+var active_tournament: Dictionary = {}
 
 var _content_registry: ContentRegistry
 var _stats_resolver: BuildStatsResolver
@@ -105,6 +124,7 @@ func new_game() -> void:
 	recent_events.clear()
 	current_event = generate_daily_event()
 	current_narrative_event = {}
+	active_tournament = {}
 	_set_game_state(STATE_RUNNING)
 	recruit_gladiator("RET")
 	recruit_gladiator("SEC")
@@ -162,6 +182,7 @@ func save_game() -> bool:
 		"recent_events": recent_events,
 		"current_event": current_event,
 		"current_narrative_event": current_narrative_event,
+		"active_tournament": active_tournament,
 	}
 	var serialized: String = JSON.stringify(payload, "\t", false)
 	var file: FileAccess = FileAccess.open(SAVE_PATH, FileAccess.WRITE)
@@ -179,6 +200,9 @@ func advance_day() -> void:
 		return
 	if has_active_narrative_event():
 		return
+	if has_active_tournament():
+		active_tournament = {}
+		add_recent_event("Tournament expired at day end.")
 	day += 1
 	current_event = generate_daily_event()
 	current_narrative_event = generate_narrative_event()
@@ -283,9 +307,14 @@ func can_start_fight() -> bool:
 		return false
 	if has_active_narrative_event():
 		return false
+	if has_active_tournament():
+		return not get_selected_gladiator().is_empty()
 	if _is_rest_event(get_current_event()):
 		return false
 	return get_available_gladiators().size() >= 1
+
+func has_active_tournament() -> bool:
+	return not active_tournament.is_empty()
 
 func has_active_narrative_event() -> bool:
 	return not current_narrative_event.is_empty()
@@ -375,12 +404,20 @@ func generate_daily_event() -> Dictionary:
 		selected_event = _build_hard_fight_event()
 	elif roll < EVENT_FIGHT_WEIGHT + EVENT_HARD_FIGHT_WEIGHT + EVENT_REST_WEIGHT:
 		selected_event = _build_rest_event()
+	elif roll < EVENT_FIGHT_WEIGHT + EVENT_HARD_FIGHT_WEIGHT + EVENT_REST_WEIGHT + EVENT_TOURNAMENT_WEIGHT:
+		selected_event = _build_tournament_event()
+	elif roll < EVENT_FIGHT_WEIGHT + EVENT_HARD_FIGHT_WEIGHT + EVENT_REST_WEIGHT + EVENT_TOURNAMENT_WEIGHT + EVENT_BEAST_FIGHT_WEIGHT:
+		selected_event = _build_beast_fight_event()
 	else:
 		selected_event = _build_fight_event()
 	if _event_type(selected_event) == EVENT_TYPE_HARD_FIGHT:
 		add_recent_event("A dangerous arena day increased the stakes.")
 	elif _event_type(selected_event) == EVENT_TYPE_REST:
 		add_recent_event("The arena was closed for rest.")
+	elif _event_type(selected_event) == EVENT_TYPE_TOURNAMENT:
+		add_recent_event("A two-match tournament has been announced.")
+	elif _event_type(selected_event) == EVENT_TYPE_BEAST_FIGHT:
+		add_recent_event("A beast hunt has been posted in the arena.")
 	return selected_event
 
 func get_current_event() -> Dictionary:
@@ -394,7 +431,7 @@ func start_next_fight() -> Dictionary:
 	if has_active_narrative_event():
 		return {"error": "Resolve the active narrative event first"}
 	var today_event: Dictionary = get_current_event()
-	if _is_rest_event(today_event):
+	if not has_active_tournament() and _is_rest_event(today_event):
 		return {"error": "The arena is closed today. Your gladiators recover."}
 	if not can_start_fight():
 		return {"error": "No available gladiators"}
@@ -406,10 +443,30 @@ func start_next_fight() -> Dictionary:
 			return {"error": "No valid player gladiator found"}
 		player_fighter = available[0]
 		selected_gladiator_id = str(player_fighter.get("id", ""))
-	var enemy_fighter: Dictionary = generate_enemy_for(player_fighter)
+	var active_event_type: String = _event_type(today_event)
+	if has_active_tournament():
+		active_event_type = EVENT_TYPE_TOURNAMENT
+	elif active_event_type == EVENT_TYPE_TOURNAMENT:
+		var tournament_start: Dictionary = start_tournament(player_fighter)
+		if tournament_start.has("error"):
+			return tournament_start
+	var enemy_fighter: Dictionary = {}
+	if active_event_type == EVENT_TYPE_BEAST_FIGHT:
+		enemy_fighter = generate_beast_enemy(player_fighter)
+	else:
+		enemy_fighter = generate_enemy_for(player_fighter)
+		if active_event_type == EVENT_TYPE_TOURNAMENT and has_active_tournament():
+			var match_index: int = int(active_tournament.get("current_match", 1))
+			if match_index >= TOURNAMENT_MATCH_COUNT:
+				enemy_fighter["level"] = clampi(int(enemy_fighter.get("level", 1)) + 1, 1, LEVEL_CAP)
+				enemy_fighter["livello"] = int(enemy_fighter.get("level", 1))
+				enemy_fighter["nome"] = "Arena Champion %s" % _to_roman(next_enemy_index)
 	if enemy_fighter.is_empty():
 		return {"error": "Enemy generation failed"}
 
+	var tournament_match_index: int = 0
+	if has_active_tournament():
+		tournament_match_index = int(active_tournament.get("current_match", 1))
 	_set_game_state(STATE_PREPARING_FIGHT)
 	var payload: Dictionary = {
 		"day": day,
@@ -419,8 +476,12 @@ func start_next_fight() -> Dictionary:
 		"player_gladiator_id": str(player_fighter.get("id", "")),
 		"enemy_gladiator_id": str(enemy_fighter.get("id", "")),
 		"attacker_build_id": _build_id_for_class(str(player_fighter.get("class", ""))),
-		"defender_build_id": _build_id_for_class(str(enemy_fighter.get("class", ""))),
-		"event_type": _event_type(today_event),
+		"defender_build_id": _build_enemy_build_id(enemy_fighter),
+		"event_type": active_event_type,
+		"encounter_label": _build_encounter_label(active_event_type, enemy_fighter),
+		"enemy_kind": "BEAST" if bool(enemy_fighter.get("is_beast", false)) else "GLADIATOR",
+		"tournament_match_index": tournament_match_index,
+		"tournament_total_matches": TOURNAMENT_MATCH_COUNT if has_active_tournament() else 0,
 	}
 	fight_started.emit(payload)
 	_set_game_state(STATE_IN_FIGHT)
@@ -457,6 +518,78 @@ func generate_enemy_for(player_gladiator: Dictionary) -> Dictionary:
 	next_enemy_index += 1
 	return enemy
 
+func generate_beast_enemy(player_gladiator: Dictionary) -> Dictionary:
+	if player_gladiator.is_empty():
+		return {}
+	var player_level: int = clampi(int(player_gladiator.get("level", player_gladiator.get("livello", 1))), 1, LEVEL_CAP)
+	var rng: RandomNumberGenerator = RandomNumberGenerator.new()
+	rng.seed = int(hash("beast-%s-%d-%d" % [str(player_gladiator.get("id", "")), day, next_enemy_index]))
+	var beast_roll: int = rng.randi_range(0, 2)
+	var beast_type: String = BEAST_TYPE_WOLF
+	if beast_roll == 1:
+		beast_type = BEAST_TYPE_BOAR
+	elif beast_roll == 2:
+		beast_type = BEAST_TYPE_LION
+	var level_delta: int = rng.randi_range(0, 1)
+	var beast_level: int = clampi(player_level + level_delta, 1, LEVEL_CAP)
+	var stats: Dictionary = _build_beast_stats(beast_type, beast_level)
+	var beast: Dictionary = {
+		"id": "beast_%04d" % next_enemy_index,
+		"name": "Arena %s" % _beast_display_name(beast_type),
+		"nome": "Arena %s" % _beast_display_name(beast_type),
+		"class": "BEAST",
+		"subtype": beast_type,
+		"level": beast_level,
+		"max_hp": int(stats.get("max_hp", 1)),
+		"atk": int(stats.get("atk", 1)),
+		"def": int(stats.get("def", 1)),
+		"alive": true,
+		"is_enemy": true,
+		"is_beast": true,
+	}
+	next_enemy_index += 1
+	return beast
+
+func start_tournament(gladiator: Dictionary) -> Dictionary:
+	if gladiator.is_empty():
+		return {"error": "No valid gladiator for tournament"}
+	var gladiator_id: String = str(gladiator.get("id", ""))
+	if gladiator_id == "":
+		return {"error": "Tournament gladiator is missing id"}
+	active_tournament = {
+		"gladiator_id": gladiator_id,
+		"current_match": 1,
+		"total_matches": TOURNAMENT_MATCH_COUNT,
+		"wins": 0,
+		"carry_over_hp": int(gladiator.get("max_hp", 1)),
+	}
+	add_recent_event("Tournament started for %s (Match 1/%d)." % [get_gladiator_display_name(gladiator), TOURNAMENT_MATCH_COUNT])
+	return active_tournament.duplicate(true)
+
+func process_tournament_step(result: Dictionary) -> Dictionary:
+	if not has_active_tournament():
+		return {}
+	var gladiator_id: String = str(active_tournament.get("gladiator_id", ""))
+	var winner_id: String = str(result.get("winner_id", ""))
+	var player_won: bool = winner_id == gladiator_id
+	var current_match: int = int(active_tournament.get("current_match", 1))
+	if not player_won:
+		add_recent_event("Tournament ended: your gladiator lost at match %d." % current_match)
+		active_tournament = {}
+		return {"tournament_completed": false, "player_won": false}
+	var carried_hp: int = maxi(0, int(result.get("winner_remaining_hp", 0)) + TOURNAMENT_BETWEEN_MATCH_RECOVERY_HP)
+	active_tournament["carry_over_hp"] = carried_hp
+	active_tournament["wins"] = int(active_tournament.get("wins", 0)) + 1
+	if current_match >= TOURNAMENT_MATCH_COUNT:
+		gold += TOURNAMENT_FINAL_GOLD_BONUS
+		fame += TOURNAMENT_FINAL_FAME_BONUS
+		add_recent_event("Tournament complete! Bonus: +%d gold, +%d fame." % [TOURNAMENT_FINAL_GOLD_BONUS, TOURNAMENT_FINAL_FAME_BONUS])
+		active_tournament = {}
+		return {"tournament_completed": true, "player_won": true}
+	active_tournament["current_match"] = current_match + 1
+	add_recent_event("Tournament progress: Final Match unlocked (Match %d/%d)." % [int(active_tournament.get("current_match", 2)), TOURNAMENT_MATCH_COUNT])
+	return {"tournament_completed": false, "player_won": true}
+
 func abort_active_fight(reason: String = "") -> void:
 	if game_state == STATE_RUNNING:
 		return
@@ -471,6 +604,7 @@ func resolve_fight(result: Dictionary) -> void:
 		return
 
 	_set_game_state(STATE_RESOLVING_FIGHT)
+	var active_event: Dictionary = _get_effective_fight_event()
 	var winner_id: String = str(result.get("winner_id", ""))
 	var loser_id: String = str(result.get("loser_id", ""))
 	var loser_dead: bool = _roll_loser_death(winner_id, loser_id, result)
@@ -490,7 +624,7 @@ func resolve_fight(result: Dictionary) -> void:
 		else:
 			apply_injury_from_fight(loser_id, result)
 
-	var reward_summary: Dictionary = award_post_fight_rewards(winner_id, loser_id, result)
+	var reward_summary: Dictionary = award_post_fight_rewards(winner_id, loser_id, result, active_event)
 	result["reward_summary"] = reward_summary
 	result["player_outcome"] = str(reward_summary.get("player_outcome", "UNKNOWN"))
 
@@ -509,6 +643,9 @@ func resolve_fight(result: Dictionary) -> void:
 		int(result.get("turns", 0)),
 	])
 	_add_player_outcome_event(winner_id, loser_id, loser_dead, reward_summary)
+	if _event_type(active_event) == EVENT_TYPE_TOURNAMENT:
+		var tournament_step: Dictionary = process_tournament_step(result)
+		result["tournament_step"] = tournament_step
 	check_end_conditions()
 
 	save_game()
@@ -532,7 +669,7 @@ func check_end_conditions() -> void:
 		_set_game_state(STATE_VICTORY)
 		add_recent_event("Your school has achieved glory!")
 
-func award_post_fight_rewards(winner_id: String, loser_id: String, result: Dictionary) -> Dictionary:
+func award_post_fight_rewards(winner_id: String, loser_id: String, result: Dictionary, event_data: Dictionary = {}) -> Dictionary:
 	var player_id: String = str(result.get("player_gladiator_id", _resolve_player_gladiator_id(winner_id, loser_id)))
 	var loser_dead: bool = bool(result.get("loser_dead", false))
 	var winner_is_player: bool = winner_id != "" and winner_id == player_id
@@ -540,11 +677,15 @@ func award_post_fight_rewards(winner_id: String, loser_id: String, result: Dicti
 	var gold_reward: int = 0
 	var fame_reward: int = 0
 	var player_outcome: String = "UNKNOWN"
-	var reward_multiplier: float = _safe_reward_multiplier(get_current_event())
+	var effective_event: Dictionary = event_data if not event_data.is_empty() else _get_effective_fight_event()
+	var event_type: String = _event_type(effective_event)
+	var reward_multiplier: float = _safe_reward_multiplier(effective_event)
 
 	if winner_is_player:
 		gold_reward = int(round(float(REWARD_GOLD_VICTORY) * reward_multiplier))
 		fame_reward = REWARD_FAME_PER_WIN
+		if event_type == EVENT_TYPE_BEAST_FIGHT:
+			fame_reward += EVENT_BEAST_FAME_BONUS
 		player_outcome = "VICTORY"
 	elif loser_is_player and not loser_dead:
 		gold_reward = int(round(float(REWARD_GOLD_DEFEAT_SURVIVED) * reward_multiplier))
@@ -721,6 +862,33 @@ func _build_enemy_name(gladiator_class: String, enemy_number: int) -> String:
 	var class_label: String = "Retiarius" if gladiator_class == "RET" else "Secutor"
 	return "Arena %s %s" % [class_label, _to_roman(enemy_number)]
 
+func _build_beast_stats(beast_type: String, beast_level: int) -> Dictionary:
+	var clamped_level: int = clampi(beast_level, 1, LEVEL_CAP)
+	if beast_type == BEAST_TYPE_WOLF:
+		return {
+			"max_hp": 13 + clamped_level,
+			"atk": 5 + clamped_level,
+			"def": 2 + int(clamped_level / 2),
+		}
+	if beast_type == BEAST_TYPE_BOAR:
+		return {
+			"max_hp": 18 + clamped_level * 2,
+			"atk": 5 + clamped_level,
+			"def": 4 + int(clamped_level / 2),
+		}
+	return {
+		"max_hp": 16 + clamped_level,
+		"atk": 7 + clamped_level,
+		"def": 4 + int(clamped_level / 2),
+	}
+
+func _beast_display_name(beast_type: String) -> String:
+	if beast_type == BEAST_TYPE_WOLF:
+		return "Wolf"
+	if beast_type == BEAST_TYPE_BOAR:
+		return "Boar"
+	return "Lion"
+
 func _to_roman(value: int) -> String:
 	var numerals: Array[Dictionary] = [
 		{"value": 1000, "symbol": "M"},
@@ -761,6 +929,27 @@ func _build_id_for_class(gladiator_class: String) -> String:
 		return SEC_BUILD_ID
 	return RET_BUILD_ID
 
+func _build_enemy_build_id(enemy_fighter: Dictionary) -> String:
+	if bool(enemy_fighter.get("is_beast", false)):
+		var subtype: String = str(enemy_fighter.get("subtype", BEAST_TYPE_WOLF))
+		if subtype == BEAST_TYPE_LION:
+			return SEC_BUILD_ID
+		if subtype == BEAST_TYPE_BOAR:
+			return RET_BUILD_ID
+		return RET_BUILD_ID
+	return _build_id_for_class(str(enemy_fighter.get("class", "")))
+
+func _build_encounter_label(event_type: String, enemy_fighter: Dictionary) -> String:
+	if event_type == EVENT_TYPE_TOURNAMENT:
+		var match_number: int = int(active_tournament.get("current_match", 1))
+		if match_number >= TOURNAMENT_MATCH_COUNT:
+			return "Final Match"
+		return "Match %d/%d" % [match_number, TOURNAMENT_MATCH_COUNT]
+	if event_type == EVENT_TYPE_BEAST_FIGHT:
+		var beast_subtype: String = str(enemy_fighter.get("subtype", BEAST_TYPE_WOLF))
+		return "Beast Fight - %s" % _beast_display_name(beast_subtype)
+	return "Arena Fight"
+
 func _build_match_seed(fighter_a: Dictionary, fighter_b: Dictionary) -> int:
 	var id_a: String = str(fighter_a.get("id", "A"))
 	var id_b: String = str(fighter_b.get("id", "B"))
@@ -781,7 +970,9 @@ func _roll_loser_death(winner_id: String, loser_id: String, result: Dictionary) 
 		int(result.get("winner_remaining_hp", 0)),
 	]
 	seeded_rng.seed = int(hash(seed_source))
-	var risk_modifier: float = _safe_risk_modifier(get_current_event())
+	var risk_modifier: float = _safe_risk_modifier(_get_effective_fight_event())
+	if has_active_tournament() and int(active_tournament.get("current_match", 1)) >= TOURNAMENT_MATCH_COUNT:
+		risk_modifier *= TOURNAMENT_FINAL_RISK_MULTIPLIER
 	var final_death_chance: float = minf(LOSS_DEATH_CHANCE_MAX, LOSS_DEATH_CHANCE * risk_modifier)
 	return seeded_rng.randf() < final_death_chance
 
@@ -837,6 +1028,7 @@ func _apply_loaded_data(data: Dictionary) -> void:
 	recent_events = _sanitize_recent_events(data.get("recent_events", []))
 	current_event = _sanitize_event(data.get("current_event", {}))
 	current_narrative_event = _sanitize_narrative_event(data.get("current_narrative_event", {}))
+	active_tournament = _sanitize_tournament_state(data.get("active_tournament", {}))
 	game_state = _sanitize_game_state(data.get("game_state", STATE_RUNNING))
 	if current_event.is_empty():
 		current_event = generate_daily_event()
@@ -930,24 +1122,64 @@ func _build_rest_event() -> Dictionary:
 		"risk_modifier": EVENT_REST_RISK_MODIFIER,
 	}
 
+func _build_tournament_event() -> Dictionary:
+	return {
+		"type": EVENT_TYPE_TOURNAMENT,
+		"name": "Tournament Day",
+		"description": "Two consecutive matches with no recovery between rounds.",
+		"reward_multiplier": EVENT_TOURNAMENT_REWARD_MULTIPLIER,
+		"risk_modifier": EVENT_TOURNAMENT_RISK_MODIFIER,
+	}
+
+func _build_beast_fight_event() -> Dictionary:
+	return {
+		"type": EVENT_TYPE_BEAST_FIGHT,
+		"name": "Beast Hunt",
+		"description": "Dangerous animal encounter with high reward and risk.",
+		"reward_multiplier": EVENT_BEAST_REWARD_MULTIPLIER,
+		"risk_modifier": EVENT_BEAST_RISK_MODIFIER,
+	}
+
 func _sanitize_event(raw_event: Variant) -> Dictionary:
 	if typeof(raw_event) != TYPE_DICTIONARY:
 		return {}
 	var source: Dictionary = raw_event as Dictionary
 	var event_type: String = str(source.get("type", EVENT_TYPE_FIGHT)).to_upper()
-	if event_type != EVENT_TYPE_FIGHT and event_type != EVENT_TYPE_HARD_FIGHT and event_type != EVENT_TYPE_REST:
+	if event_type != EVENT_TYPE_FIGHT and event_type != EVENT_TYPE_HARD_FIGHT and event_type != EVENT_TYPE_REST and event_type != EVENT_TYPE_TOURNAMENT and event_type != EVENT_TYPE_BEAST_FIGHT:
 		event_type = EVENT_TYPE_FIGHT
 	var fallback: Dictionary = _build_fight_event()
 	if event_type == EVENT_TYPE_HARD_FIGHT:
 		fallback = _build_hard_fight_event()
 	elif event_type == EVENT_TYPE_REST:
 		fallback = _build_rest_event()
+	elif event_type == EVENT_TYPE_TOURNAMENT:
+		fallback = _build_tournament_event()
+	elif event_type == EVENT_TYPE_BEAST_FIGHT:
+		fallback = _build_beast_fight_event()
 	return {
 		"type": event_type,
 		"name": str(source.get("name", str(fallback.get("name", "")))),
 		"description": str(source.get("description", str(fallback.get("description", "")))),
 		"reward_multiplier": _sanitize_multiplier(source.get("reward_multiplier", fallback.get("reward_multiplier", 1.0)), float(fallback.get("reward_multiplier", 1.0))),
 		"risk_modifier": _sanitize_multiplier(source.get("risk_modifier", fallback.get("risk_modifier", 1.0)), float(fallback.get("risk_modifier", 1.0))),
+	}
+
+func _sanitize_tournament_state(raw_value: Variant) -> Dictionary:
+	if typeof(raw_value) != TYPE_DICTIONARY:
+		return {}
+	var source: Dictionary = raw_value as Dictionary
+	var gladiator_id: String = str(source.get("gladiator_id", ""))
+	if gladiator_id == "":
+		return {}
+	var selected: Dictionary = _find_gladiator_by_id(gladiator_id)
+	if selected.is_empty() or get_gladiator_status(selected) != STATUS_AVAILABLE:
+		return {}
+	return {
+		"gladiator_id": gladiator_id,
+		"current_match": clampi(int(source.get("current_match", 1)), 1, TOURNAMENT_MATCH_COUNT),
+		"total_matches": TOURNAMENT_MATCH_COUNT,
+		"wins": maxi(0, int(source.get("wins", 0))),
+		"carry_over_hp": maxi(0, int(source.get("carry_over_hp", int(selected.get("max_hp", 1))))),
 	}
 
 func _build_doctor_visit_event() -> Dictionary:
@@ -1100,6 +1332,11 @@ func _sanitize_multiplier(value: Variant, fallback: float) -> float:
 
 func _event_type(event_data: Dictionary) -> String:
 	return str(event_data.get("type", EVENT_TYPE_FIGHT)).to_upper()
+
+func _get_effective_fight_event() -> Dictionary:
+	if has_active_tournament():
+		return _build_tournament_event()
+	return get_current_event()
 
 func _is_rest_event(event_data: Dictionary) -> bool:
 	return _event_type(event_data) == EVENT_TYPE_REST

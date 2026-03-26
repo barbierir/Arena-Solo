@@ -128,16 +128,27 @@ func _ensure_button_focusable(button: Button) -> void:
 func _prepare_fighters(payload: Dictionary) -> void:
 	var fighter_a: Dictionary = payload.get("fighter_a", {})
 	var fighter_b: Dictionary = payload.get("fighter_b", {})
+	var encounter_label: String = str(payload.get("encounter_label", "Arena Fight"))
+	var match_index: int = int(payload.get("tournament_match_index", 0))
+	var total_matches: int = int(payload.get("tournament_total_matches", 0))
 	_set_fighter_labels(fighter_a, _fighter_a_name, _fighter_a_class, _fighter_a_hp)
 	_set_fighter_labels(fighter_b, _fighter_b_name, _fighter_b_class, _fighter_b_hp)
-	_header_label.text = "Arena Fight - %s vs %s" % [
+	if match_index > 0 and total_matches > 0:
+		encounter_label = "Match %d/%d" % [match_index, total_matches]
+		if match_index >= total_matches:
+			encounter_label = "Final Match"
+	_header_label.text = "%s - %s vs %s" % [
+		encounter_label,
 		str(fighter_a.get("nome", "Fighter A")),
 		str(fighter_b.get("nome", "Fighter B")),
 	]
 
 func _set_fighter_labels(fighter: Dictionary, name_label: Label, class_label: Label, hp_label: Label) -> void:
 	name_label.text = str(fighter.get("nome", "Sconosciuto"))
-	class_label.text = "Classe: %s" % str(fighter.get("class", "?"))
+	var class_name: String = str(fighter.get("class", "?"))
+	if bool(fighter.get("is_beast", false)):
+		class_name = "BEAST (%s)" % str(fighter.get("subtype", ""))
+	class_label.text = "Classe: %s" % class_name
 	var max_hp: int = int(fighter.get("max_hp", fighter.get("hp", 0)))
 	hp_label.text = "HP: %d/%d" % [max_hp, max_hp]
 
