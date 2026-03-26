@@ -145,10 +145,10 @@ func _prepare_fighters(payload: Dictionary) -> void:
 
 func _set_fighter_labels(fighter: Dictionary, name_label: Label, class_label: Label, hp_label: Label) -> void:
 	name_label.text = str(fighter.get("nome", "Sconosciuto"))
-	var class_name: String = str(fighter.get("class", "?"))
+	var fighter_class_name: String = str(fighter.get("class", "?"))
 	if bool(fighter.get("is_beast", false)):
-		class_name = "BEAST (%s)" % str(fighter.get("subtype", ""))
-	class_label.text = "Classe: %s" % class_name
+		fighter_class_name = "BEAST (%s)" % str(fighter.get("subtype", ""))
+	class_label.text = "Classe: %s" % fighter_class_name
 	var max_hp: int = int(fighter.get("max_hp", fighter.get("hp", 0)))
 	hp_label.text = "HP: %d/%d" % [max_hp, max_hp]
 
