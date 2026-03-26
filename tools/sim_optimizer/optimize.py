@@ -7,26 +7,50 @@ import shutil
 import random
 from pathlib import Path
 from typing import Any
+from math import prod
 
 from .loader import load_definitions
 from .simulate import run_batch
 
 
-def load_param_config(path: Path | None) -> dict[str, list[int]]:
+def load_param_config(path: Path | None) -> dict[str, list[float | int]]:
     if path is None:
         return {
-            "SECUTOR.base_def": [5, 6, 7],
-            "SECUTOR.base_sta": [7, 8, 9],
-            "SHIELD_BASH.sta_cost": [3, 4, 5],
-            "SHIELD_BASH.flat_damage": [0, 1, 2],
-            "RECOVER.sta_cost": [0, 1],
+            "SHIELD_BASH.cooldown_turns": [1, 2, 3],
+            "NET_THROW.flat_damage": [0, 1, 2],
+            "NET_THROW.sta_cost": [4, 5, 6],
+            "NET_THROW.cooldown_turns": [2, 3, 4],
+            "RECOVER.sta_cost": [0, 1, 2],
+            "COMBAT_CONTROLS.recover_bonus_stamina": [2, 3, 4],
+            "COMBAT_CONTROLS.recover_focus_hit_bonus_pct": [8, 10, 12],
+            "COMBAT_CONTROLS.entangled_target_hit_bonus_pct": [10, 12, 14],
+            "COMBAT_CONTROLS.net_throw_off_balance_damage_penalty": [25, 30, 35],
+            "COMBAT_CONTROLS.finisher_pressure_bonus_damage": [1, 2, 3],
+            "RETIARIUS.base_atk": [5, 6, 7],
+            "RETIARIUS.base_spd": [7, 8, 9],
+            "SECUTOR.base_atk": [6, 7, 8],
         }
     with path.open("r", encoding="utf-8") as f:
         payload = json.load(f)
     return {str(k): list(v) for k, v in payload.items()}
 
 
-def _apply_params(defs_dir: Path, params: dict[str, int], tmp_dir: Path) -> Path:
+def _split_param_key(key: str) -> tuple[str, str]:
+    try:
+        entity_id, field = key.split(".", 1)
+    except ValueError as exc:
+        raise ValueError(
+            f"Invalid optimizer parameter key '{key}'. Expected format '<ID>.<field>' or "
+            "'MATCHUP.<ATTACKER_vs_DEFENDER>.<field>'."
+        ) from exc
+    if not entity_id or not field:
+        raise ValueError(
+            f"Invalid optimizer parameter key '{key}'. Expected non-empty '<ID>.<field>'."
+        )
+    return entity_id, field
+
+
+def _apply_params(defs_dir: Path, params: dict[str, float | int], tmp_dir: Path) -> Path:
     src = defs_dir
     dst = tmp_dir
     dst.mkdir(parents=True, exist_ok=True)
@@ -39,22 +63,69 @@ def _apply_params(defs_dir: Path, params: dict[str, int], tmp_dir: Path) -> Path
     def write(name: str, payload: dict[str, Any]) -> None:
         dst.joinpath(name).write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
-    classes = read("classes.json")
-    skills = read("skills.json")
+    definitions = {
+        "classes.json": read("classes.json"),
+        "skills.json": read("skills.json"),
+        "combat_rules.json": read("combat_rules.json"),
+        "matchup_modifiers.json": read("matchup_modifiers.json"),
+    }
+    entries_by_file: dict[str, dict[str, Any]] = {}
+    for name, payload in definitions.items():
+        entries = payload.get("entries")
+        if not isinstance(entries, dict):
+            raise ValueError(f"Definition file '{name}' is missing top-level 'entries' map.")
+        entries_by_file[name] = entries
 
     for key, value in params.items():
-        if key.startswith("SECUTOR."):
-            field = key.split(".", 1)[1]
-            classes["entries"]["SECUTOR"][field] = value
-        elif key.startswith("SHIELD_BASH."):
-            field = key.split(".", 1)[1]
-            skills["entries"]["SHIELD_BASH"][field] = value
-        elif key.startswith("RECOVER."):
-            field = key.split(".", 1)[1]
-            skills["entries"]["RECOVER"][field] = value
+        if key.startswith("MATCHUP."):
+            parts = key.split(".", 2)
+            if len(parts) != 3 or not parts[1] or not parts[2]:
+                raise ValueError(
+                    f"Invalid MATCHUP key '{key}'. Expected 'MATCHUP.<ATTACKER_vs_DEFENDER>.<field>'."
+                )
+            matchup_key, field = parts[1], parts[2]
+            matchup_entries = entries_by_file["matchup_modifiers.json"]
+            if matchup_key not in matchup_entries:
+                raise ValueError(
+                    f"Unknown matchup key '{matchup_key}' in optimizer key '{key}'. "
+                    f"Available keys: {sorted(matchup_entries.keys())}"
+                )
+            target = matchup_entries[matchup_key]
+            if field not in target:
+                raise ValueError(
+                    f"Unknown field '{field}' for matchup '{matchup_key}' in key '{key}'. "
+                    f"Available fields: {sorted(target.keys())}"
+                )
+            target[field] = value
+            continue
 
-    write("classes.json", classes)
-    write("skills.json", skills)
+        entity_id, field = _split_param_key(key)
+        candidate_files = [
+            file_name
+            for file_name in ("classes.json", "skills.json", "combat_rules.json")
+            if entity_id in entries_by_file[file_name]
+        ]
+        if not candidate_files:
+            raise ValueError(
+                f"Unknown optimizer parameter target '{entity_id}' in key '{key}'. "
+                "Expected a class ID, skill ID, COMBAT_CONTROLS, or MATCHUP.* key."
+            )
+        if len(candidate_files) > 1:
+            raise ValueError(
+                f"Ambiguous optimizer key '{key}'. Target '{entity_id}' exists in multiple definition files: "
+                f"{candidate_files}"
+            )
+        target_file = candidate_files[0]
+        target_entry = entries_by_file[target_file][entity_id]
+        if field not in target_entry:
+            raise ValueError(
+                f"Unknown field '{field}' for '{entity_id}' in key '{key}' ({target_file}). "
+                f"Available fields: {sorted(target_entry.keys())}"
+            )
+        target_entry[field] = value
+
+    for name, payload in definitions.items():
+        write(name, payload)
     return dst
 
 
@@ -103,17 +174,27 @@ def optimize(
     rng = random.Random(seed)
 
     keys = list(param_space.keys())
-    all_combos = list(itertools.product(*(param_space[k] for k in keys)))
-    if trials > 0 and trials < len(all_combos):
-        combos = rng.sample(all_combos, trials)
+    values_per_key = [param_space[k] for k in keys]
+    total_combos = prod(len(values) for values in values_per_key)
+    if total_combos == 0:
+        raise ValueError("Parameter config must provide at least one candidate value for each key.")
+
+    if trials > 0:
+        combos = [tuple(rng.choice(values) for values in values_per_key) for _ in range(trials)]
     else:
-        combos = all_combos
+        max_exhaustive = 500_000
+        if total_combos > max_exhaustive:
+            raise ValueError(
+                f"Exhaustive search requires {total_combos} combinations, which exceeds safe limit "
+                f"({max_exhaustive}). Use --trials with random sampling or narrow the parameter ranges."
+            )
+        combos = list(itertools.product(*values_per_key))
 
     candidates = []
     tmp_base = Path(tempfile.mkdtemp(prefix="sim_optimizer_"))
 
     for idx, combo in enumerate(combos):
-        params = {k: int(v) for k, v in zip(keys, combo)}
+        params = {k: v for k, v in zip(keys, combo)}
         candidate_defs = _apply_params(definitions_dir, params, tmp_base / f"cand_{idx}")
         matchups = {
             "RET_STARTER_vs_RET_STARTER": run_batch(
@@ -163,6 +244,7 @@ def optimize(
     shutil.rmtree(tmp_base, ignore_errors=True)
     return {
         "trial_count": len(combos),
+        "search_space_size": total_combos,
         "runs_per_matchup": runs_per_matchup,
         "max_turns": max_turns,
         "seed": seed,

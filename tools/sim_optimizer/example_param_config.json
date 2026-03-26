@@ -1,7 +1,18 @@
 {
-  "SECUTOR.base_def": [5, 6, 7],
-  "SECUTOR.base_sta": [7, 8, 9],
-  "SHIELD_BASH.sta_cost": [3, 4, 5],
-  "SHIELD_BASH.flat_damage": [0, 1, 2],
-  "RECOVER.sta_cost": [0, 1]
+  "SHIELD_BASH.cooldown_turns": [1, 2, 3],
+  "NET_THROW.flat_damage": [0, 1, 2],
+  "NET_THROW.sta_cost": [4, 5, 6],
+  "NET_THROW.cooldown_turns": [2, 3, 4],
+  "RECOVER.sta_cost": [0, 1, 2],
+  "COMBAT_CONTROLS.recover_bonus_stamina": [2, 3, 4],
+  "COMBAT_CONTROLS.recover_focus_hit_bonus_pct": [8, 10, 12],
+  "COMBAT_CONTROLS.entangled_target_hit_bonus_pct": [10, 12, 14],
+  "COMBAT_CONTROLS.net_throw_off_balance_damage_penalty": [25, 30, 35],
+  "COMBAT_CONTROLS.finisher_pressure_bonus_damage": [1, 2, 3],
+  "RETIARIUS.base_atk": [5, 6, 7],
+  "RETIARIUS.base_spd": [7, 8, 9],
+  "SECUTOR.base_atk": [6, 7, 8],
+  "MATCHUP.RET_STARTER_vs_RET_STARTER.global_damage_multiplier": [0.85, 0.9, 0.95],
+  "MATCHUP.RET_STARTER_vs_SEC_STARTER.attacker_bonus_hp": [0, 1, 2],
+  "MATCHUP.SEC_STARTER_vs_RET_STARTER.defender_bonus_hp": [0, 1, 2]
 }
