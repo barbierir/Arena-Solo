@@ -257,12 +257,15 @@ def main() -> None:
         print(f"Parsed reports: {payload.get('parsed_reports', 0)} | overall calibration: {payload.get('overall_calibration_score')}")
         print("Top drift matchups:")
         for item in payload.get("top_drift_matchups", []):
+            diag = payload.get("matchups", {}).get(item.get("matchup", ""), {}).get("parser_diagnostics", {})
+            action_src = diag.get("action_usage_source")
             print(
-                "  {m}: score={s} severity={sev} fights={f}".format(
+                "  {m}: score={s} severity={sev} fights={f} action_source={src}".format(
                     m=item.get("matchup", ""),
                     s=item.get("calibration_score"),
                     sev=item.get("drift_severity"),
                     f=item.get("total_fights", 0),
+                    src=action_src,
                 )
             )
         if args.export_csv:
