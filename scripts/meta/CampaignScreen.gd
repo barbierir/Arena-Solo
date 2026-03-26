@@ -142,6 +142,8 @@ func _on_roster_updated() -> void:
 func _on_state_changed(new_state: String) -> void:
 	_state_value.text = new_state
 	_refresh_campaign_end_overlay()
+	_refresh_campaign_actions_state()
+	_refresh_selected_fighter()
 	if not _is_fight_flow_active:
 		_refresh_start_fight_button_state()
 

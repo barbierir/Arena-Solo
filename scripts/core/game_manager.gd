@@ -757,9 +757,9 @@ func resolve_fight(result: Dictionary) -> void:
 	roster_updated.emit()
 	_emit_resources_updated()
 	_emit_recent_events_updated()
-	fight_resolved.emit(result)
 	if game_state == STATE_RESOLVING_FIGHT:
 		_set_game_state(STATE_RUNNING)
+	fight_resolved.emit(result)
 
 func check_end_conditions() -> void:
 	if game_state == STATE_VICTORY or game_state == STATE_DEFEAT:
