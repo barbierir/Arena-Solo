@@ -19,7 +19,11 @@
       "exhausted_spd_penalty": -2,
       "exhausted_sta_regen_penalty": -1,
       "bleed_damage_per_turn": 2,
-      "defense_effectiveness": 0.9
+      "defense_effectiveness": 0.9,
+      "recover_focus_hit_bonus_pct": 0.1,
+      "net_throw_off_balance_damage_penalty": 1,
+      "finisher_pressure_bonus_damage": 1,
+      "entangled_target_hit_bonus_pct": 0.1
     }
   }
 }

@@ -47,6 +47,30 @@
       "dot_damage": 0,
       "skip_turn": false,
       "duration_source": "Runtime"
+    },
+    "FOCUSED": {
+      "id": "FOCUSED",
+      "display_name": "Focused",
+      "stack_rule": "Replace",
+      "atk_mod": 0,
+      "def_mod": 0,
+      "spd_mod": 0,
+      "sta_regen_mod": 0,
+      "dot_damage": 0,
+      "skip_turn": false,
+      "duration_source": "Runtime"
+    },
+    "OFF_BALANCE": {
+      "id": "OFF_BALANCE",
+      "display_name": "Off-Balance",
+      "stack_rule": "Replace",
+      "atk_mod": 0,
+      "def_mod": 0,
+      "spd_mod": 0,
+      "sta_regen_mod": 0,
+      "dot_damage": 0,
+      "skip_turn": false,
+      "duration_source": "Runtime"
     }
   }
 }

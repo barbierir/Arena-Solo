@@ -56,3 +56,14 @@ func update_exhausted(actor: CombatantRuntimeState) -> void:
 			if entry.get("status_id", "") != "EXHAUSTED":
 				next_statuses.append(entry)
 		actor.active_statuses = next_statuses
+
+func remove_status(actor: CombatantRuntimeState, status_id: String) -> bool:
+	var removed: bool = false
+	var remaining: Array[Dictionary] = []
+	for entry in actor.active_statuses:
+		if not removed and str(entry.get("status_id", "")) == status_id:
+			removed = true
+			continue
+		remaining.append(entry)
+	actor.active_statuses = remaining
+	return removed
