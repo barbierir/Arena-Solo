@@ -6,6 +6,7 @@ const COMBAT_ADAPTER_SCRIPT: GDScript = preload("res://scripts/combat/bridge/Cam
 @onready var _gold_value: Label = %GoldValue
 @onready var _fame_value: Label = %FameValue
 @onready var _day_value: Label = %DayValue
+@onready var _today_event_title: Label = %TodayEventTitle
 @onready var _state_value: Label = %StateValue
 @onready var _today_event_name_value: Label = %TodayEventNameValue
 @onready var _today_event_type_value: Label = %TodayEventTypeValue
@@ -83,7 +84,7 @@ func _on_advance_day_pressed() -> void:
 	if not GameManager.can_advance_turn():
 		return
 	GameManager.advance_turn()
-	GameManager.add_recent_event("Turno avanzato.")
+	GameManager.add_recent_event("Advanced Phase.")
 	_refresh_recent_events()
 
 func _on_start_fight_pressed() -> void:
@@ -131,7 +132,7 @@ func _on_load_pressed() -> void:
 func _on_resources_updated(gold: int, fame: int, day: int) -> void:
 	_gold_value.text = str(gold)
 	_fame_value.text = str(fame)
-	_day_value.text = str(day)
+	_day_value.text = GameManager.format_phase_progress(day)
 
 func _on_roster_updated() -> void:
 	_render_roster()
@@ -163,7 +164,7 @@ func _on_fight_started(payload: Dictionary) -> void:
 	_is_fight_flow_active = true
 	var fighter_a: Dictionary = payload.get("fighter_a", {})
 	var fighter_b: Dictionary = payload.get("fighter_b", {})
-	var encounter_label: String = str(payload.get("encounter_label", "Arena Fight"))
+	var encounter_label: String = str(payload.get("encounter_label", "Phase 1 - Arena Match"))
 	GameManager.add_recent_event("%s: %s vs %s" % [
 		encounter_label,
 		str(fighter_a.get("nome", "A")),
@@ -243,7 +244,7 @@ func _render_roster() -> void:
 		var exp_segment: String = "MAX" if exp_required <= 0 else "%d/%d" % [experience, exp_required]
 		var injury_label: String = ""
 		if status == GameManager.STATUS_INJURED:
-			injury_label = " (%dg)" % int(gladiator.get("injured_days", 0))
+			injury_label = " (%s)" % GameManager.format_injury_recovering_label(int(gladiator.get("injured_days", 0)))
 		var row: String = "%s | %s | Lv %d XP %s | HP:%d ATK:%d DEF:%d | %s%s | W:%d L:%d" % [
 			GameManager.get_gladiator_display_name(gladiator),
 			str(gladiator.get("class", "")),
@@ -288,7 +289,7 @@ func _refresh_campaign_actions_state() -> void:
 	_recruit_ret_button.disabled = not controls_enabled
 	_recruit_sec_button.disabled = not controls_enabled
 	_advance_turn_button.disabled = not can_advance_turn_now
-	_advance_turn_button.tooltip_text = _build_advance_turn_block_reason() if not can_advance_turn_now else "Advance to next turn."
+	_advance_turn_button.tooltip_text = _build_advance_turn_block_reason() if not can_advance_turn_now else "Advance to next phase."
 	_start_fight_button.disabled = not can_fight_now
 	_save_button.disabled = not controls_enabled
 	_load_button.disabled = not controls_enabled
@@ -313,7 +314,7 @@ func _refresh_start_fight_button_state() -> void:
 	if has_tournament:
 		_start_fight_button.text = "Continue Tournament"
 	else:
-		_start_fight_button.text = "No Fights Today" if is_rest_day else "Enter Arena"
+		_start_fight_button.text = "No Fights This Phase" if is_rest_day else "Enter Arena"
 
 func _refresh_narrative_overlay() -> void:
 	var event_data: Dictionary = GameManager.get_current_narrative_event()
@@ -374,11 +375,11 @@ func _build_advance_turn_block_reason() -> String:
 		if GameManager.can_continue_active_tournament():
 			return "Concludi prima il torneo attivo."
 		return "Il torneo non e' continuabile e verra' chiuso automaticamente."
-	return "Advance Turn is not available right now."
+	return "Advance Phase is not available right now."
 
 func _refresh_today_event() -> void:
 	var event_data: Dictionary = GameManager.get_current_event()
-	var event_name: String = str(event_data.get("name", "Arena Bout"))
+	var event_name: String = str(event_data.get("name", "Arena Match"))
 	var event_type: String = str(event_data.get("type", "FIGHT"))
 	var event_description: String = str(event_data.get("description", "No event details available."))
 	var reward_multiplier: float = float(event_data.get("reward_multiplier", 1.0))
@@ -386,21 +387,22 @@ func _refresh_today_event() -> void:
 	var risk_text: String = "Standard risk of death"
 	var type_label: String = event_type
 	if GameManager.has_active_tournament():
-		type_label = "Tournament Turn"
+		type_label = "Tournament Match"
 		event_description = "Tournament in progress. 2 matches required."
 		risk_text = "Escalating risk (final match is deadlier)"
 	if event_type == GameManager.EVENT_TYPE_HARD_FIGHT:
 		risk_text = "High risk of death"
 	elif event_type == GameManager.EVENT_TYPE_REST:
-		risk_text = "No arena death risk today"
+		risk_text = "No arena death risk this phase"
 	elif event_type == GameManager.EVENT_TYPE_TOURNAMENT:
-		type_label = "Tournament Turn"
+		type_label = "Tournament Match"
 		event_description = "%s 2 matches required." % event_description
 		risk_text = "High sustained risk across two matches"
 	elif event_type == GameManager.EVENT_TYPE_BEAST_FIGHT:
 		type_label = "Beast Hunt"
 		event_description = "%s Dangerous animal encounter." % event_description
 		risk_text = "Dangerous animal encounter"
+	_today_event_title.text = GameManager.format_event_during_phase()
 	_today_event_name_value.text = event_name
 	_today_event_type_value.text = type_label
 	_today_event_description_value.text = event_description
@@ -434,12 +436,13 @@ func _refresh_campaign_end_overlay() -> void:
 	if not is_final_state:
 		return
 	if state == GameManager.STATE_VICTORY:
-		_end_game_title.text = "You have become a legendary Lanista"
-		_end_game_stats.text = "Turns: %d\nFame: %d\nSurviving gladiators: %d" % [
-			GameManager.day,
+		_end_game_title.text = "You survived all 30 Phases."
+		_end_game_stats.text = "Current Phase: %d / %d\nFame: %d\nSurviving gladiators: %d" % [
+			GameManager.get_current_phase(),
+			GameManager.campaign_length_turns,
 			GameManager.fame,
 			GameManager.get_surviving_gladiators_count(),
 		]
 		return
 	_end_game_title.text = "Your school has fallen"
-	_end_game_stats.text = "Turns: %d\nFame: %d" % [GameManager.day, GameManager.fame]
+	_end_game_stats.text = "Current Phase: %d / %d\nFame: %d" % [GameManager.get_current_phase(), GameManager.campaign_length_turns, GameManager.fame]
