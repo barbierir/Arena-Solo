@@ -99,7 +99,7 @@ func _reset_viewer() -> void:
 	_timeline_index = 0
 	_is_complete = false
 	_finalized_once = false
-	_header_label.text = "Arena Fight"
+	_header_label.text = "Phase 1 - Arena Match"
 	_turn_label.text = "Turno: -"
 	_log_label.clear()
 	_result_panel.visible = false
@@ -128,15 +128,16 @@ func _ensure_button_focusable(button: Button) -> void:
 func _prepare_fighters(payload: Dictionary) -> void:
 	var fighter_a: Dictionary = payload.get("fighter_a", {})
 	var fighter_b: Dictionary = payload.get("fighter_b", {})
-	var encounter_label: String = str(payload.get("encounter_label", "Arena Fight"))
+	var encounter_label: String = str(payload.get("encounter_label", "Phase 1 - Arena Match"))
 	var match_index: int = int(payload.get("tournament_match_index", 0))
 	var total_matches: int = int(payload.get("tournament_total_matches", 0))
 	_set_fighter_labels(fighter_a, _fighter_a_name, _fighter_a_class, _fighter_a_hp)
 	_set_fighter_labels(fighter_b, _fighter_b_name, _fighter_b_class, _fighter_b_hp)
 	if match_index > 0 and total_matches > 0:
-		encounter_label = "Match %d/%d" % [match_index, total_matches]
+		var phase_value: int = int(payload.get("day", 1))
+		encounter_label = "Phase %d - Tournament Match %d/%d" % [phase_value, match_index, total_matches]
 		if match_index >= total_matches:
-			encounter_label = "Final Match"
+			encounter_label = "Phase %d - Final Games" % phase_value
 	_header_label.text = "%s - %s vs %s" % [
 		encounter_label,
 		str(fighter_a.get("nome", "Fighter A")),
@@ -230,7 +231,7 @@ func _build_result_text(result: Dictionary) -> String:
 	lines.append("[b]Risultato Finale[/b]")
 	lines.append("Vincitore: %s" % winner_name)
 	lines.append("Sconfitto: %s" % loser_name)
-	lines.append("Turni totali: %d" % int(result.get("turns", 0)))
+	lines.append("Turns in match: %d" % int(result.get("turns", 0)))
 	lines.append("HP residui vincitore: %d" % int(result.get("winner_remaining_hp", 0)))
 	lines.append("Esito combattimento: KO (morte decisa nel post-fight)")
 	var player_outcome: String = str(result.get("player_outcome", ""))

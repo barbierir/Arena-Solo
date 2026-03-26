@@ -149,6 +149,33 @@ var campaign_victory_mode: String = STANDARD_CAMPAIGN_VICTORY_MODE
 var _content_registry: ContentRegistry
 var _stats_resolver: BuildStatsResolver
 
+func get_current_phase() -> int:
+	return day
+
+func format_phase_label(phase_value: int = -1) -> String:
+	var normalized_phase: int = phase_value if phase_value > 0 else day
+	return "Phase %d" % normalized_phase
+
+func format_phase_progress(phase_value: int = -1, total_phases: int = -1) -> String:
+	var normalized_phase: int = phase_value if phase_value > 0 else day
+	var normalized_total: int = total_phases if total_phases > 0 else campaign_length_turns
+	return "Phase %d / %d" % [normalized_phase, normalized_total]
+
+func format_event_during_phase(phase_value: int = -1) -> String:
+	var normalized_phase: int = phase_value if phase_value > 0 else day
+	return "Event during Phase %d" % normalized_phase
+
+func format_advance_phase_log(previous_phase: int, next_phase: int) -> String:
+	return "%s - Advanced to Phase %d." % [format_phase_label(previous_phase), next_phase]
+
+func format_injury_duration_phrasing(value: int) -> String:
+	var clamped_value: int = maxi(0, value)
+	var suffix: String = "phase" if clamped_value == 1 else "phases"
+	return "%d %s" % [clamped_value, suffix]
+
+func format_injury_recovering_label(value: int) -> String:
+	return "Recovering (%s remaining)" % format_injury_duration_phrasing(value)
+
 func _ready() -> void:
 	_bootstrap_content()
 	ensure_log_directories()
@@ -179,8 +206,8 @@ func new_game() -> void:
 	_set_game_state(STATE_RUNNING)
 	recruit_gladiator("RET")
 	recruit_gladiator("SEC")
-	add_recent_event("Nuova campagna avviata (giorno %d)." % day)
-	append_campaign_log("Turn %d - New campaign started." % day)
+	add_recent_event("New campaign started (%s)." % format_phase_label())
+	append_campaign_log("%s - New campaign started." % format_phase_label())
 	var saved: bool = save_game()
 	save_completed.emit(saved)
 	roster_updated.emit()
@@ -260,7 +287,7 @@ func advance_turn() -> void:
 	if not can_advance_turn():
 		return
 	day += 1
-	append_campaign_log("Turn %d - Advanced to turn %d." % [day - 1, day])
+	append_campaign_log(format_advance_phase_log(day - 1, day))
 	current_event = generate_daily_event()
 	current_narrative_event = generate_narrative_event()
 	heal_and_update_injuries()
@@ -396,7 +423,7 @@ func recruit_gladiator(gladiator_class: String) -> Dictionary:
 	roster.append(gladiator)
 	next_gladiator_index += 1
 	add_recent_event("Reclutato %s." % get_gladiator_display_name(gladiator))
-	append_campaign_log("Turn %d - Recruited %s (%s) for %d gold." % [day, get_gladiator_display_name(gladiator), str(gladiator.get("class", "")), recruit_cost])
+	append_campaign_log("%s - Recruited %s (%s) for %d gold." % [format_phase_label(), get_gladiator_display_name(gladiator), str(gladiator.get("class", "")), recruit_cost])
 	save_game()
 	roster_updated.emit()
 	_emit_resources_updated()
@@ -465,7 +492,7 @@ func invalidate_active_tournament(reason: String = "invalid_state") -> void:
 	elif normalized_reason == "inconsistent_state":
 		reason_message = "The tournament was forfeited because tournament data was inconsistent."
 	add_recent_event(reason_message)
-	append_campaign_log("Turn %d - Tournament forfeited: %s" % [day, normalized_reason])
+	append_campaign_log("%s - Tournament forfeited: %s" % [format_phase_label(), normalized_reason])
 	save_game()
 	roster_updated.emit()
 	_emit_resources_updated()
@@ -600,7 +627,7 @@ func resolve_narrative_event(choice_id: String) -> void:
 		return
 
 	add_recent_event("%s — %s" % [str(event_data.get("title", "Narrative Event")), result_message])
-	append_campaign_log("Turn %d - Narrative event %s resolved: %s" % [day, event_id, result_message])
+	append_campaign_log("%s - Narrative event %s resolved: %s" % [format_event_during_phase(), event_id, result_message])
 	current_narrative_event = {}
 	save_game()
 	roster_updated.emit()
@@ -626,7 +653,7 @@ func generate_daily_event() -> Dictionary:
 	else:
 		selected_event = _build_fight_event()
 	if _event_type(selected_event) == EVENT_TYPE_HARD_FIGHT:
-		add_recent_event("A dangerous arena day increased the stakes.")
+		add_recent_event("A dangerous arena phase increased the stakes.")
 	elif _event_type(selected_event) == EVENT_TYPE_REST:
 		add_recent_event("The arena was closed for rest.")
 	elif _event_type(selected_event) == EVENT_TYPE_TOURNAMENT:
@@ -650,7 +677,7 @@ func start_next_fight() -> Dictionary:
 		return {"error": "Tournament could not continue and was forfeited"}
 	var today_event: Dictionary = get_current_event()
 	if not has_active_tournament() and _is_rest_event(today_event):
-		return {"error": "The arena is closed today. Your gladiators recover."}
+		return {"error": "The arena is closed this phase. Your gladiators recover."}
 	if not can_start_fight():
 		return {"error": "No available gladiators"}
 
@@ -818,7 +845,7 @@ func process_tournament_step(result: Dictionary) -> Dictionary:
 	var current_match: int = int(active_tournament.get("current_match", 1))
 	if not player_won:
 		add_recent_event("Tournament ended: your gladiator lost at match %d." % current_match)
-		append_campaign_log("Turn %d - Tournament ended with defeat at match %d." % [day, current_match])
+		append_campaign_log("%s - Tournament ended with defeat at match %d." % [format_phase_label(), current_match])
 		active_tournament = {}
 		locked_tournament_gladiator_id = ""
 		return {"tournament_completed": false, "player_won": false}
@@ -829,7 +856,7 @@ func process_tournament_step(result: Dictionary) -> Dictionary:
 		gold += TOURNAMENT_FINAL_GOLD_BONUS
 		fame += TOURNAMENT_FINAL_FAME_BONUS
 		add_recent_event("Tournament complete! Bonus: +%d gold, +%d fame." % [TOURNAMENT_FINAL_GOLD_BONUS, TOURNAMENT_FINAL_FAME_BONUS])
-		append_campaign_log("Turn %d - Tournament completed: +%d gold, +%d fame." % [day, TOURNAMENT_FINAL_GOLD_BONUS, TOURNAMENT_FINAL_FAME_BONUS])
+		append_campaign_log("%s - Tournament completed: +%d gold, +%d fame." % [format_phase_label(), TOURNAMENT_FINAL_GOLD_BONUS, TOURNAMENT_FINAL_FAME_BONUS])
 		active_tournament = {}
 		locked_tournament_gladiator_id = ""
 		return {"tournament_completed": true, "player_won": true}
@@ -873,7 +900,7 @@ func resolve_fight(result: Dictionary) -> void:
 			loser["alive"] = false
 			loser["injured_days"] = 0
 			add_recent_event("%s was slain in the arena." % get_gladiator_display_name(loser))
-			append_campaign_log("Turn %d - Death: %s was slain in the arena." % [day, get_gladiator_display_name(loser)])
+			append_campaign_log("%s - Death: %s was slain in the arena." % [format_phase_label(), get_gladiator_display_name(loser)])
 		else:
 			injury_applied_days = apply_injury_from_fight(loser_id, result)
 	result["injury_applied_days"] = injury_applied_days
@@ -898,8 +925,8 @@ func resolve_fight(result: Dictionary) -> void:
 		int(result.get("turns", 0)),
 	])
 	_add_player_outcome_event(winner_id, loser_id, loser_dead, reward_summary)
-	append_campaign_log("Turn %d - Fight result: %s defeated %s in %d turns (%s)." % [
-		day,
+	append_campaign_log("%s - Fight result: %s defeated %s in %d turns (%s)." % [
+		format_phase_label(),
 		get_gladiator_display_name(winner) if not winner.is_empty() else winner_id,
 		get_gladiator_display_name(loser) if not loser.is_empty() else loser_id,
 		int(result.get("turns", 0)),
@@ -929,13 +956,13 @@ func check_end_conditions() -> void:
 	if not has_living_gladiators():
 		_set_game_state(STATE_DEFEAT)
 		add_recent_event("All your gladiators are dead.")
-		append_campaign_log("Turn %d - Campaign defeat: all gladiators are dead." % day)
+		append_campaign_log("%s - Campaign defeat: all gladiators are dead." % format_phase_label())
 		return
 	var victory_status: Dictionary = _evaluate_campaign_victory_status()
 	if bool(victory_status.get("achieved", false)):
 		_set_game_state(STATE_VICTORY)
-		add_recent_event("Your school has achieved glory!")
-		append_campaign_log("Turn %d - Campaign victory achieved: %s" % [day, str(victory_status.get("reason", "unknown reason"))])
+		add_recent_event("You survived all 30 Phases.")
+		append_campaign_log("%s - Campaign victory achieved: %s" % [format_phase_label(), str(victory_status.get("reason", "unknown reason"))])
 
 func _evaluate_campaign_victory_status() -> Dictionary:
 	var turn_value: int = day
@@ -945,17 +972,17 @@ func _evaluate_campaign_victory_status() -> Dictionary:
 		mode = STANDARD_CAMPAIGN_VICTORY_MODE
 	var reached_turn_target: bool = turn_value >= target_turn
 	if mode == STANDARD_CAMPAIGN_VICTORY_MODE:
-		append_campaign_log("Campaign victory check: turn %d/%d, %s." % [turn_value, target_turn, "victory achieved" if reached_turn_target else "continue campaign"])
+		append_campaign_log("Campaign victory check: phase %d/%d, %s." % [turn_value, target_turn, "victory achieved" if reached_turn_target else "continue campaign"])
 		append_campaign_log("Campaign victory check: alternate fame victory disabled in standard mode.")
 		if reached_turn_target:
-			return {"achieved": true, "reason": "reached final turn (%d/%d)." % [turn_value, target_turn]}
+			return {"achieved": true, "reason": "reached final phase (%d/%d)." % [turn_value, target_turn]}
 		return {"achieved": false}
 	var fame_value: int = fame
 	var reached_fame_target: bool = fame_value >= VICTORY_FAME_TARGET
-	append_campaign_log("Campaign victory check: turn %d/%d, %s." % [turn_value, target_turn, "victory achieved" if reached_turn_target else "continue campaign"])
+	append_campaign_log("Campaign victory check: phase %d/%d, %s." % [turn_value, target_turn, "victory achieved" if reached_turn_target else "continue campaign"])
 	append_campaign_log("Campaign victory check: fame target %d/%d, %s." % [fame_value, VICTORY_FAME_TARGET, "victory achieved" if reached_fame_target else "continue campaign"])
 	if reached_turn_target:
-		return {"achieved": true, "reason": "reached final turn (%d/%d)." % [turn_value, target_turn]}
+		return {"achieved": true, "reason": "reached final phase (%d/%d)." % [turn_value, target_turn]}
 	if reached_fame_target:
 		return {"achieved": true, "reason": "reached fame target (%d/%d)." % [fame_value, VICTORY_FAME_TARGET]}
 	return {"achieved": false}
@@ -1083,7 +1110,7 @@ func process_level_ups(gladiator: Dictionary) -> Array[Dictionary]:
 		_apply_level_growth(gladiator, current_level)
 		var message: String = "%s ha raggiunto il livello %d." % [get_gladiator_display_name(gladiator), current_level]
 		add_recent_event(message)
-		append_campaign_log("Turn %d - Level up: %s reached level %d." % [day, get_gladiator_display_name(gladiator), current_level])
+		append_campaign_log("%s - Level up: %s reached level %d." % [format_phase_label(), get_gladiator_display_name(gladiator), current_level])
 		events.append({
 			"type": "LEVEL_UP",
 			"message": message,
@@ -1110,14 +1137,14 @@ func apply_injury_from_fight(gladiator_id: String, result: Dictionary) -> int:
 	else:
 		injury_days = injury_rng.randi_range(INJURY_DAYS_LIGHT_LOSS_MIN, INJURY_DAYS_LIGHT_LOSS_MAX)
 	gladiator["injured_days"] = maxi(1, injury_days)
-	add_recent_event("%s e' ferito per %d giorni." % [get_gladiator_display_name(gladiator), injury_days])
+	add_recent_event("%s injured for %s." % [get_gladiator_display_name(gladiator), format_injury_duration_phrasing(injury_days)])
 	return injury_days
 
 func add_recent_event(event_text: String) -> void:
 	var normalized: String = event_text.strip_edges()
 	if normalized == "":
 		return
-	recent_events.append("Turn %d - %s" % [day, normalized])
+	recent_events.append("%s - %s" % [format_phase_label(), normalized])
 	while recent_events.size() > RECENT_EVENTS_MAX:
 		recent_events.remove_at(0)
 
@@ -1150,7 +1177,7 @@ func write_battle_report(result: Dictionary, event_data: Dictionary = {}) -> voi
 	var player_fighter: Dictionary = payload.get("fighter_a", {}) as Dictionary
 	var enemy_fighter: Dictionary = payload.get("fighter_b", {}) as Dictionary
 	var event_type: String = str(payload.get("event_type", _event_type(event_data)))
-	var event_name: String = str(event_data.get("name", str(payload.get("encounter_label", "Arena Fight"))))
+	var event_name: String = str(event_data.get("name", str(payload.get("encounter_label", "Arena Match"))))
 	var battle_index: int = battle_history.size()
 	var player_name_part: String = _sanitize_filename_component(get_gladiator_display_name(player_fighter))
 	var enemy_name_part: String = _sanitize_filename_component(get_gladiator_display_name(enemy_fighter))
@@ -1166,7 +1193,7 @@ func write_battle_report(result: Dictionary, event_data: Dictionary = {}) -> voi
 		push_warning("GameManager.write_battle_report: failed to open %s." % filename)
 		return
 	var lines: PackedStringArray = []
-	lines.append("Day: %d" % day)
+	lines.append("Phase: %d" % day)
 	lines.append("Event Type: %s" % event_type)
 	lines.append("Event Name: %s" % event_name)
 	lines.append("Player Gladiator: id=%s, name=%s, class=%s, level=%d" % [
@@ -1194,7 +1221,7 @@ func write_battle_report(result: Dictionary, event_data: Dictionary = {}) -> voi
 	lines.append("Gold Reward: %d" % int(reward_summary.get("gold", 0)))
 	lines.append("Fame Reward: %d" % int(reward_summary.get("fame", 0)))
 	lines.append("XP Reward Player: %d" % int(player_progression.get("xp_gained", 0)))
-	lines.append("Injury Applied Days: %d" % int(result.get("injury_applied_days", 0)))
+	lines.append("Injury Applied Phases: %d" % int(result.get("injury_applied_days", 0)))
 	if event_type == EVENT_TYPE_TOURNAMENT:
 		lines.append("Tournament Match Index: %d" % int(payload.get("tournament_match_index", 0)))
 		lines.append("Tournament Total Matches: %d" % int(payload.get("tournament_total_matches", 0)))
@@ -1374,12 +1401,12 @@ func _build_encounter_label(event_type: String, enemy_fighter: Dictionary) -> St
 	if event_type == EVENT_TYPE_TOURNAMENT:
 		var match_number: int = int(active_tournament.get("current_match", 1))
 		if match_number >= TOURNAMENT_MATCH_COUNT:
-			return "Final Match"
-		return "Match %d/%d" % [match_number, TOURNAMENT_MATCH_COUNT]
+			return "%s - Final Games" % format_phase_label()
+		return "%s - Tournament Match %d/%d" % [format_phase_label(), match_number, TOURNAMENT_MATCH_COUNT]
 	if event_type == EVENT_TYPE_BEAST_FIGHT:
 		var beast_subtype: String = str(enemy_fighter.get("subtype", BEAST_TYPE_WOLF))
-		return "Beast Fight - %s" % _beast_display_name(beast_subtype)
-	return "Arena Fight"
+		return "%s - Beast Hunt (%s)" % [format_phase_label(), _beast_display_name(beast_subtype)]
+	return "%s - Arena Match" % format_phase_label()
 
 func _build_match_seed(fighter_a: Dictionary, fighter_b: Dictionary) -> int:
 	var id_a: String = str(fighter_a.get("id", "A"))
@@ -1543,8 +1570,8 @@ func _sanitize_recent_events(raw_value: Variant) -> Array[String]:
 func _build_fight_event() -> Dictionary:
 	return {
 		"type": EVENT_TYPE_FIGHT,
-		"name": "Arena Bout",
-		"description": "A standard arena day with balanced rewards and danger.",
+		"name": "Arena Match",
+		"description": "A standard arena phase with balanced rewards and danger.",
 		"reward_multiplier": EVENT_FIGHT_REWARD_MULTIPLIER,
 		"risk_modifier": EVENT_FIGHT_RISK_MODIFIER,
 	}
@@ -1562,7 +1589,7 @@ func _build_rest_event() -> Dictionary:
 	return {
 		"type": EVENT_TYPE_REST,
 		"name": "Closed Gates",
-		"description": "The arena is closed today. Your gladiators recover.",
+		"description": "The arena is closed this phase. Your gladiators recover.",
 		"reward_multiplier": EVENT_REST_REWARD_MULTIPLIER,
 		"risk_modifier": EVENT_REST_RISK_MODIFIER,
 	}
@@ -1570,7 +1597,7 @@ func _build_rest_event() -> Dictionary:
 func _build_tournament_event() -> Dictionary:
 	return {
 		"type": EVENT_TYPE_TOURNAMENT,
-		"name": "Tournament Day",
+		"name": "Tournament of the Arena",
 		"description": "Two consecutive matches with no recovery between rounds.",
 		"reward_multiplier": EVENT_TOURNAMENT_REWARD_MULTIPLIER,
 		"risk_modifier": EVENT_TOURNAMENT_RISK_MODIFIER,
@@ -1637,7 +1664,7 @@ func _build_doctor_visit_event() -> Dictionary:
 		"title": "A Physician Offers His Services",
 		"description": "A physician offers targeted treatment for your worst injury case.",
 		"choices": [
-			{"id": "PAY", "text": "Pay 10 gold to treat one injured gladiator (-3 injury days)"},
+			{"id": "PAY", "text": "Pay 10 gold to treat one injured gladiator (-3 injury phases)"},
 			{"id": "REFUSE", "text": "Refuse the physician"},
 		],
 	}
@@ -1659,7 +1686,7 @@ func _build_harsh_training_event() -> Dictionary:
 		"title": "A Brutal Training Regimen",
 		"description": "Your trainers propose a punishing routine to force rapid improvement.",
 		"choices": [
-			{"id": "PUSH", "text": "Push the men harder (+3 XP to one available gladiator, 25% chance of +1 injury day)"},
+			{"id": "PUSH", "text": "Push the men harder (+3 XP to one available gladiator, 25% chance of +1 injury phase)"},
 			{"id": "NORMAL", "text": "Keep training normal (no effect)"},
 		],
 	}
@@ -1681,7 +1708,7 @@ func _build_ambitious_gladiator_event() -> Dictionary:
 		"title": "An Ambitious Gladiator Pleads",
 		"description": "An injured gladiator asks to return early to prove worth.",
 		"choices": [
-			{"id": "ALLOW", "text": "Allow an early return (-2 injury days, next fight riskier)"},
+			{"id": "ALLOW", "text": "Allow an early return (-2 injury phases, next fight riskier)"},
 			{"id": "DENY", "text": "Refuse and keep recovery plan"},
 		],
 	}
@@ -1797,7 +1824,7 @@ func _resolve_doctor_visit_choice(choice_id: String) -> String:
 	gold -= DOCTOR_VISIT_COST_GOLD
 	var before_days: int = maxi(0, int(target.get("injured_days", 0)))
 	target["injured_days"] = maxi(0, before_days - DOCTOR_HEAL_AMOUNT_DAYS)
-	return "You paid the physician. %s was treated (%d -> %d injury days, -%d)." % [get_gladiator_display_name(target), before_days, int(target.get("injured_days", 0)), DOCTOR_HEAL_AMOUNT_DAYS]
+	return "You paid the physician. %s was treated (%d -> %d injury phases, -%d)." % [get_gladiator_display_name(target), before_days, int(target.get("injured_days", 0)), DOCTOR_HEAL_AMOUNT_DAYS]
 
 func _resolve_crowd_favor_choice(choice_id: String) -> String:
 	if choice_id == "SAVE":
@@ -1834,7 +1861,7 @@ func _resolve_harsh_training_choice(choice_id: String) -> String:
 		target["injured_days"] = maxi(1, int(target.get("injured_days", 0)) + 1)
 		injury_applied = true
 	if injury_applied:
-		return "Harsh training improved %s, but left them battered (+3 XP, +1 injury day)." % get_gladiator_display_name(target)
+		return "Harsh training improved %s, but left them battered (+3 XP, +1 injury phase)." % get_gladiator_display_name(target)
 	return "Harsh training improved %s (+3 XP, no injury)." % get_gladiator_display_name(target)
 
 func _resolve_rivalry_choice(choice_id: String) -> String:
@@ -1857,7 +1884,7 @@ func _resolve_ambitious_gladiator_choice(choice_id: String) -> String:
 	var before_days: int = int(target.get("injured_days", 0))
 	target["injured_days"] = maxi(0, before_days - 2)
 	next_fight_risk_modifier_mult = maxf(next_fight_risk_modifier_mult, 1.2)
-	return "%s returns earlier (%d -> %d injury days). Next fight is riskier." % [get_gladiator_display_name(target), before_days, int(target.get("injured_days", 0))]
+	return "%s returns earlier (%d -> %d injury phases). Next fight is riskier." % [get_gladiator_display_name(target), before_days, int(target.get("injured_days", 0))]
 
 func _resolve_patron_offer_choice(choice_id: String) -> String:
 	if choice_id == "REFUSE":
@@ -1966,7 +1993,7 @@ func apply_rest_day_recovery_bonus() -> void:
 		current_injury_days -= 1
 		gladiator["injured_days"] = current_injury_days
 		if current_injury_days == 0:
-			add_recent_event("%s fully recovered during the arena rest day." % get_gladiator_display_name(gladiator))
+			add_recent_event("%s fully recovered during the arena rest phase." % get_gladiator_display_name(gladiator))
 
 func _set_game_state(new_state: String) -> void:
 	if game_state == new_state:

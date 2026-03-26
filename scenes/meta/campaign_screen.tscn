@@ -63,12 +63,12 @@ text = "0"
 
 [node name="DayLabel" type="Label" parent="Margin/RootVBox/ResourcePanel/ResourceMargin/Header"]
 layout_mode = 2
-text = "Turn:"
+text = "Current Phase:"
 
 [node name="DayValue" type="Label" parent="Margin/RootVBox/ResourcePanel/ResourceMargin/Header"]
 unique_name_in_owner = true
 layout_mode = 2
-text = "1"
+text = "Phase 1 / 30"
 
 [node name="StateLabel" type="Label" parent="Margin/RootVBox/ResourcePanel/ResourceMargin/Header"]
 layout_mode = 2
@@ -113,7 +113,7 @@ text = "Recruit SEC"
 [node name="AdvanceDayButton" type="Button" parent="Margin/RootVBox/ActionsPanel/ActionsMargin/Buttons"]
 unique_name_in_owner = true
 layout_mode = 2
-text = "Advance Turn"
+text = "Advance Phase"
 
 [node name="StartFightButton" type="Button" parent="Margin/RootVBox/ActionsPanel/ActionsMargin/Buttons"]
 unique_name_in_owner = true
@@ -199,13 +199,14 @@ layout_mode = 2
 theme_override_constants/separation = 4
 
 [node name="TodayEventTitle" type="Label" parent="Margin/RootVBox/ContentRow/SidePanel/TodayEventPanel/TodayEventMargin/TodayEventVBox"]
+unique_name_in_owner = true
 layout_mode = 2
-text = "TODAY'S EVENT"
+text = "Event during Phase 1"
 
 [node name="TodayEventNameValue" type="Label" parent="Margin/RootVBox/ContentRow/SidePanel/TodayEventPanel/TodayEventMargin/TodayEventVBox"]
 unique_name_in_owner = true
 layout_mode = 2
-text = "Arena Bout"
+text = "Arena Match"
 
 [node name="TodayEventTypeLabel" type="Label" parent="Margin/RootVBox/ContentRow/SidePanel/TodayEventPanel/TodayEventMargin/TodayEventVBox"]
 layout_mode = 2
@@ -220,7 +221,7 @@ text = "FIGHT"
 unique_name_in_owner = true
 layout_mode = 2
 autowrap_mode = 2
-text = "A standard arena day."
+text = "A standard arena phase."
 
 [node name="TodayEventRewardValue" type="Label" parent="Margin/RootVBox/ContentRow/SidePanel/TodayEventPanel/TodayEventMargin/TodayEventVBox"]
 unique_name_in_owner = true
@@ -406,7 +407,7 @@ text = "Campaign Result"
 unique_name_in_owner = true
 layout_mode = 2
 horizontal_alignment = 1
-text = "Turns: 0\nFame: 0"
+text = "Current Phase: 0 / 30\nFame: 0"
 
 [node name="OverlayNewGameButton" type="Button" parent="EndGameOverlay/CenterContainer/Panel/OverlayMargin/OverlayVBox"]
 unique_name_in_owner = true
