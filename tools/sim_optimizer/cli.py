@@ -7,7 +7,7 @@ from typing import Any
 
 from .optimize import optimize
 from .simulate import PRESETS, compare_variants, run_batch, run_suite
-from .validate import compare_suite_to_references
+from .validate import export_validation_csv, export_validation_json, validate_against_godot_logs
 
 
 def _write_output(payload: dict, output: str | None) -> None:
@@ -146,13 +146,18 @@ def build_parser() -> argparse.ArgumentParser:
     cmp_cmd.add_argument("--verbose", action="store_true")
     cmp_cmd.add_argument("--output")
 
-    val = sub.add_parser("validate", help="Compare Python aggregate output to Godot batch report JSON")
-    val.add_argument("--reference-dir", default="batch_reports")
+    val = sub.add_parser("validate", help="Validate simulator matchup metrics against Godot text batch reports")
+    val.add_argument("--godot-log-dir", default="batch_reports", help="Directory with Godot .txt batch reports")
     val.add_argument("--runs", type=int, default=1000)
     val.add_argument("--seed", type=int, default=6100)
     val.add_argument("--max-turns", type=int, default=128)
+    val.add_argument("--min-sample-size", type=int, default=1, help="Hide drift rankings under this Godot fight count")
+    val.add_argument("--top-drift", type=int, default=5, help="Number of highest-drift matchups to print")
+    val.add_argument("--sample-logs", action="store_true", help="Attach representative simulator samples (short/median/long)")
     val.add_argument("--verbose", action="store_true", help="Print active matchup modifiers")
     val.add_argument("--no-matchup-modifiers", action="store_true", help="Disable matchup modifiers")
+    val.add_argument("--export-csv", help="Optional CSV export path")
+    val.add_argument("--export-json", help="Optional JSON export path")
     val.add_argument("--output")
 
     opt = sub.add_parser("optimize", help="Search a bounded parameter space for balance candidates")
@@ -237,15 +242,35 @@ def main() -> None:
                 )
         _write_output(payload, args.output)
     elif args.command == "validate":
-        payload = compare_suite_to_references(
+        payload = validate_against_godot_logs(
             defs_dir,
-            Path(args.reference_dir),
+            Path(args.godot_log_dir),
             args.runs,
             args.max_turns,
             args.seed,
             enable_matchup_modifiers=not args.no_matchup_modifiers,
             verbose=args.verbose,
+            min_sample_size=args.min_sample_size,
+            top_drift_count=args.top_drift,
+            sample_logs=args.sample_logs,
         )
+        print(f"Parsed reports: {payload.get('parsed_reports', 0)} | overall calibration: {payload.get('overall_calibration_score')}")
+        print("Top drift matchups:")
+        for item in payload.get("top_drift_matchups", []):
+            print(
+                "  {m}: score={s} severity={sev} fights={f}".format(
+                    m=item.get("matchup", ""),
+                    s=item.get("calibration_score"),
+                    sev=item.get("drift_severity"),
+                    f=item.get("total_fights", 0),
+                )
+            )
+        if args.export_csv:
+            export_validation_csv(payload, Path(args.export_csv))
+            print(f"Wrote {args.export_csv}")
+        if args.export_json:
+            export_validation_json(payload, Path(args.export_json))
+            print(f"Wrote {args.export_json}")
         _write_output(payload, args.output)
     elif args.command == "optimize":
         payload = optimize(
