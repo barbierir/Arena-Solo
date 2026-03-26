@@ -161,13 +161,21 @@ Recommended balancing loop:
 
 ## Optimizer
 
-Default parameter space (bounded, SEC-focused):
+Default parameter space (bounded, broader balance-focused):
 
-- `SECUTOR.base_def`
-- `SECUTOR.base_sta`
-- `SHIELD_BASH.sta_cost`
-- `SHIELD_BASH.flat_damage`
+- `SHIELD_BASH.cooldown_turns`
+- `NET_THROW.flat_damage`
+- `NET_THROW.sta_cost`
+- `NET_THROW.cooldown_turns`
 - `RECOVER.sta_cost`
+- `COMBAT_CONTROLS.recover_bonus_stamina`
+- `COMBAT_CONTROLS.recover_focus_hit_bonus_pct`
+- `COMBAT_CONTROLS.entangled_target_hit_bonus_pct`
+- `COMBAT_CONTROLS.net_throw_off_balance_damage_penalty`
+- `COMBAT_CONTROLS.finisher_pressure_bonus_damage`
+- `RETIARIUS.base_atk`
+- `RETIARIUS.base_spd`
+- `SECUTOR.base_atk`
 
 Run exhaustive grid (default with `--trials 0`):
 
@@ -186,6 +194,49 @@ Use custom parameter space:
 ```bash
 python -m tools.sim_optimizer.cli optimize --param-config tools/sim_optimizer/example_param_config.json --trials 500 --runs 250
 ```
+
+### Supported parameter key formats
+
+The optimizer key parser is definition-driven and validates both target IDs and fields before writing.
+
+| Key style | Maps to file | Example |
+|---|---|---|
+| `<CLASS_ID>.<field>` | `data/definitions/classes.json` | `RETIARIUS.base_spd` |
+| `<SKILL_ID>.<field>` | `data/definitions/skills.json` | `NET_THROW.cooldown_turns` |
+| `COMBAT_CONTROLS.<field>` | `data/definitions/combat_rules.json` | `COMBAT_CONTROLS.recover_bonus_stamina` |
+| `MATCHUP.<ATTACKER_vs_DEFENDER>.<field>` | `data/definitions/matchup_modifiers.json` | `MATCHUP.RET_STARTER_vs_SEC_STARTER.attacker_bonus_hp` |
+
+Validation behavior:
+
+- invalid key format fails with a clear message
+- unknown IDs fail with available targets/context
+- unknown fields fail with available fields for the matched entry
+- ambiguous IDs across files fail explicitly (safety guard)
+
+Backwards compatibility:
+
+- older configs like `SECUTOR.base_def`, `SHIELD_BASH.flat_damage`, and `RECOVER.sta_cost` remain valid
+- CLI usage and command shape are unchanged
+
+### Recommended current balance experiment sets
+
+- Anti-stunlock:
+  - `SHIELD_BASH.cooldown_turns`
+  - `COMBAT_CONTROLS.entangled_target_hit_bonus_pct`
+  - `COMBAT_CONTROLS.net_throw_off_balance_damage_penalty`
+- Recover / Focused:
+  - `RECOVER.sta_cost`
+  - `COMBAT_CONTROLS.recover_bonus_stamina`
+  - `COMBAT_CONTROLS.recover_focus_hit_bonus_pct`
+- RET mirror pacing:
+  - `RETIARIUS.base_spd`
+  - `NET_THROW.cooldown_turns`
+  - `MATCHUP.RET_STARTER_vs_RET_STARTER.global_damage_multiplier`
+- SEC vs RET fairness:
+  - `SECUTOR.base_atk`
+  - `RETIARIUS.base_atk`
+  - `MATCHUP.RET_STARTER_vs_SEC_STARTER.attacker_bonus_hp`
+  - `MATCHUP.SEC_STARTER_vs_RET_STARTER.defender_bonus_hp`
 
 Score objectives (explicit):
 
