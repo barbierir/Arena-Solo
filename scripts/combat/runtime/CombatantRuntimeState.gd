@@ -21,6 +21,10 @@ var total_crit_mod_pct: float = 0.0
 var temporary_defense_bonus: int = 0
 var cooldowns: Dictionary = {}
 var active_statuses: Array[Dictionary] = []
+var focused_hit_bonus_pct: float = 0.0
+var off_balance_damage_penalty: int = 0
+var consecutive_stun_attempts_received: int = 0
+var was_stunned_last_turn: bool = false
 
 func is_alive() -> bool:
 	return current_hp > 0
