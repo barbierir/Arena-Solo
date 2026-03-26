@@ -393,15 +393,19 @@ func format_batch_result_text(batch_result: Dictionary, build_entries: Dictionar
 	lines.append_array(_sorted_count_lines(batch_result.get("terminal_condition_counts", {})))
 	lines.append("")
 	lines.append("Ability Usage (all fights):")
+	lines.append("- NOTE: Combined across attacker + defender (legacy aggregate).")
 	lines.append_array(_sorted_count_lines(batch_result.get("action_usage_counts", {})))
 	lines.append("")
 	lines.append("Status Applications (all fights):")
+	lines.append("- NOTE: Combined across attacker + defender (legacy aggregate).")
 	lines.append_array(_sorted_count_lines(batch_result.get("status_application_counts", {})))
 	lines.append("")
 	lines.append("Per-Fighter Diagnostics:")
-	lines.append_array(_fighter_diagnostics_lines(batch_result.get("fighters", {}).get("attacker", {}), "A", attacker_name))
+	lines.append("Attacker:")
+	lines.append_array(_indented_lines(_fighter_diagnostics_lines(batch_result.get("fighters", {}).get("attacker", {}), "A", attacker_name), "  "))
 	lines.append("")
-	lines.append_array(_fighter_diagnostics_lines(batch_result.get("fighters", {}).get("defender", {}), "B", defender_name))
+	lines.append("Defender:")
+	lines.append_array(_indented_lines(_fighter_diagnostics_lines(batch_result.get("fighters", {}).get("defender", {}), "B", defender_name), "  "))
 	lines.append("")
 	lines.append("Extended Aggregate Metrics:")
 	lines.append_array(_extended_aggregate_lines(batch_result.get("aggregate_metrics", {}), total_runs))
@@ -642,3 +646,9 @@ func _fighter_diagnostics_lines(metrics: Dictionary, side_id: String, display_na
 	lines.append("- Status uptime turns:")
 	lines.append_array(_sorted_count_lines(metrics.get("status_uptime_turns", {})))
 	return lines
+
+func _indented_lines(lines: Array[String], prefix: String) -> Array[String]:
+	var out: Array[String] = []
+	for line in lines:
+		out.append("%s%s" % [prefix, line])
+	return out

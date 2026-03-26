@@ -72,7 +72,29 @@ def _extract_between(lines: list[str], start: str, end_markers: tuple[str, ...])
     return buf
 
 
-def _parse_fighter_block(lines: list[str], side_label: str) -> dict[str, Any]:
+def _normalize_action_key(raw_key: str) -> str:
+    return raw_key.strip().lower()
+
+
+def _find_section_start(lines: list[str], candidates: tuple[str, ...]) -> int | None:
+    candidate_set = {c.strip() for c in candidates}
+    for i, line in enumerate(lines):
+        if line.strip() in candidate_set:
+            return i
+    return None
+
+
+def _slice_until_marker(lines: list[str], start_idx: int, end_markers: tuple[str, ...]) -> list[str]:
+    marker_set = {m.strip() for m in end_markers}
+    buf: list[str] = []
+    for line in lines[start_idx + 1 :]:
+        if line.strip() in marker_set:
+            break
+        buf.append(line)
+    return buf
+
+
+def _parse_fighter_block(block_lines: list[str], side_label: str | None = None) -> dict[str, Any]:
     out: dict[str, Any] = {
         "wins": None,
         "losses": None,
@@ -82,22 +104,7 @@ def _parse_fighter_block(lines: list[str], side_label: str) -> dict[str, Any]:
         "status_uptime_turns": {},
         "end_hp_in_wins": None,
     }
-    header_idx = None
-    for i, line in enumerate(lines):
-        if line.startswith(f"{side_label} (") and line.rstrip().endswith("):"):
-            header_idx = i
-            break
-    if header_idx is None:
-        return out
-
-    block = lines[header_idx + 1 :]
-    for i, line in enumerate(block):
-        stripped = line.strip()
-        if re.match(r"^[AB] \(.*\):$", stripped):
-            block = block[:i]
-            break
-
-    for line in block:
+    for line in block_lines:
         wl = re.search(r"W/L:\s*(\d+)\s*/\s*(\d+)", line)
         if wl:
             out["wins"] = int(wl.group(1))
@@ -112,7 +119,7 @@ def _parse_fighter_block(lines: list[str], side_label: str) -> dict[str, Any]:
     def _capture_subsection(title: str) -> dict[str, int]:
         rows: list[str] = []
         in_sub = False
-        for line in block:
+        for line in block_lines:
             st = line.strip()
             if st == title:
                 in_sub = True
@@ -128,6 +135,40 @@ def _parse_fighter_block(lines: list[str], side_label: str) -> dict[str, Any]:
     out["status_application_counts"] = _capture_subsection("- Status applications:")
     out["status_uptime_turns"] = _capture_subsection("- Status uptime turns:")
     return out
+
+
+def _extract_fighter_blocks(lines: list[str]) -> dict[str, dict[str, Any]]:
+    start_idx = _find_section_start(lines, ("Per-Fighter Diagnostics:",))
+    if start_idx is None:
+        return {"attacker": _parse_fighter_block([], None), "defender": _parse_fighter_block([], None)}
+
+    section = _slice_until_marker(lines, start_idx, ("Extended Aggregate Metrics:",))
+    current: str | None = None
+    blocks: dict[str, list[str]] = {"attacker": [], "defender": []}
+
+    for raw_line in section:
+        line = raw_line.strip()
+        if not line:
+            continue
+        if line == "Attacker:":
+            current = "attacker"
+            continue
+        if line == "Defender:":
+            current = "defender"
+            continue
+        if re.match(r"^A \(.*\):$", line):
+            current = "attacker"
+            continue
+        if re.match(r"^B \(.*\):$", line):
+            current = "defender"
+            continue
+        if current in blocks:
+            blocks[current].append(line)
+
+    return {
+        "attacker": _parse_fighter_block(blocks.get("attacker", []), "A"),
+        "defender": _parse_fighter_block(blocks.get("defender", []), "B"),
+    }
 
 
 def parse_godot_text_report(path: Path) -> dict[str, Any] | None:
@@ -175,20 +216,29 @@ def parse_godot_text_report(path: Path) -> dict[str, Any] | None:
     if not attacker_id or not defender_id:
         return None
 
-    action_section = _extract_between(
-        lines,
-        "Ability Usage (all fights):",
-        ("Status Applications (all fights):", "Per-Fighter Diagnostics:"),
-    )
-    status_section = _extract_between(lines, "Status Applications (all fights):", ("Per-Fighter Diagnostics:",))
-    terminal_section = _extract_between(lines, "Terminal Conditions:", ("Ability Usage (all fights):",))
+    action_start = _find_section_start(lines, ("Ability Usage (all fights):",))
+    status_start = _find_section_start(lines, ("Status Applications (all fights):",))
+    terminal_start = _find_section_start(lines, ("Terminal Conditions:",))
+
+    action_section = []
+    if action_start is not None:
+        action_section = _slice_until_marker(lines, action_start, ("Status Applications (all fights):", "Per-Fighter Diagnostics:"))
+
+    status_section = []
+    if status_start is not None:
+        status_section = _slice_until_marker(lines, status_start, ("Per-Fighter Diagnostics:",))
+
+    terminal_section = []
+    if terminal_start is not None:
+        terminal_section = _slice_until_marker(lines, terminal_start, ("Ability Usage (all fights):", "Per-Fighter Diagnostics:"))
 
     actions = _extract_count_map(action_section)
     statuses = _extract_count_map(status_section)
     terminals = _extract_count_map(terminal_section)
 
-    fighter_a = _parse_fighter_block(lines, "A")
-    fighter_b = _parse_fighter_block(lines, "B")
+    fighters = _extract_fighter_blocks(lines)
+    fighter_a = fighters.get("attacker", _parse_fighter_block([], "A"))
+    fighter_b = fighters.get("defender", _parse_fighter_block([], "B"))
 
     return {
         "source_file": path.name,
@@ -244,11 +294,14 @@ def _aggregate_real_metrics(reports: list[dict[str, Any]]) -> dict[str, dict[str
         turn_avg_den = 0
         turn_median_values: list[float] = []
 
-        action_counts: dict[str, int] = {}
+        combined_action_counts: dict[str, int] = {}
         status_counts: dict[str, int] = {}
         misses = 0
         winner_hp_num = 0.0
         winner_hp_den = 0
+        per_side_action_counts: dict[str, dict[str, int]] = {"attacker": {}, "defender": {}}
+        fights_with_per_fighter_actions = 0
+        fights_with_legacy_combined_only = 0
 
         for i in items:
             runs = _safe_int(i.get("total_runs")) or 1
@@ -261,9 +314,23 @@ def _aggregate_real_metrics(reports: list[dict[str, Any]]) -> dict[str, dict[str
                 turn_median_values.extend([med] * runs)
 
             for k, v in i.get("action_usage_counts", {}).items():
-                action_counts[k] = action_counts.get(k, 0) + int(v)
+                combined_action_counts[k] = combined_action_counts.get(k, 0) + int(v)
             for k, v in i.get("status_application_counts", {}).items():
                 status_counts[k] = status_counts.get(k, 0) + int(v)
+
+            attacker_counts = i.get("fighters", {}).get("attacker", {}).get("ability_usage_counts", {}) or {}
+            defender_counts = i.get("fighters", {}).get("defender", {}).get("ability_usage_counts", {}) or {}
+            has_per_fighter = bool(attacker_counts) and bool(defender_counts)
+            if has_per_fighter:
+                fights_with_per_fighter_actions += runs
+                for key, value in attacker_counts.items():
+                    norm_key = _normalize_action_key(str(key))
+                    per_side_action_counts["attacker"][norm_key] = per_side_action_counts["attacker"].get(norm_key, 0) + int(value)
+                for key, value in defender_counts.items():
+                    norm_key = _normalize_action_key(str(key))
+                    per_side_action_counts["defender"][norm_key] = per_side_action_counts["defender"].get(norm_key, 0) + int(value)
+            elif i.get("action_usage_counts"):
+                fights_with_legacy_combined_only += runs
 
             a_miss = _safe_int(i.get("fighters", {}).get("attacker", {}).get("miss_count")) or 0
             b_miss = _safe_int(i.get("fighters", {}).get("defender", {}).get("miss_count")) or 0
@@ -283,6 +350,40 @@ def _aggregate_real_metrics(reports: list[dict[str, Any]]) -> dict[str, dict[str
         avg_turns = (turn_avg_num / turn_avg_den) if turn_avg_den else None
         med_turns = float(median(turn_median_values)) if turn_median_values else None
 
+        attacker_actions: dict[str, float | None]
+        defender_actions: dict[str, float | None]
+        action_source: str
+        action_notes: list[str] = []
+        if fights_with_per_fighter_actions > 0:
+            denom = max(1, fights_with_per_fighter_actions)
+            attacker_actions = {
+                "shield_bash": per_side_action_counts["attacker"].get("shield_bash", 0) / denom,
+                "net_throw": per_side_action_counts["attacker"].get("net_throw", 0) / denom,
+                "recover": per_side_action_counts["attacker"].get("recover", 0) / denom,
+            }
+            defender_actions = {
+                "shield_bash": per_side_action_counts["defender"].get("shield_bash", 0) / denom,
+                "net_throw": per_side_action_counts["defender"].get("net_throw", 0) / denom,
+                "recover": per_side_action_counts["defender"].get("recover", 0) / denom,
+            }
+            action_source = "per_fighter"
+            if fights_with_legacy_combined_only > 0:
+                action_notes.append("Some reports only had legacy combined action fields; excluded from per-fighter drift metrics.")
+        elif fights_with_legacy_combined_only > 0:
+            attacker_actions = {"shield_bash": None, "net_throw": None, "recover": None}
+            defender_actions = {"shield_bash": None, "net_throw": None, "recover": None}
+            action_source = "legacy_combined_only"
+            action_notes.append("Per-fighter action usage unavailable (legacy combined-only report format).")
+        else:
+            attacker_actions = {"shield_bash": None, "net_throw": None, "recover": None}
+            defender_actions = {"shield_bash": None, "net_throw": None, "recover": None}
+            action_source = "unavailable"
+            action_notes.append("Per-fighter action usage missing from parsed reports.")
+
+        avg_recover_usage = None
+        if attacker_actions.get("recover") is not None and defender_actions.get("recover") is not None:
+            avg_recover_usage = float(attacker_actions["recover"] or 0.0) + float(defender_actions["recover"] or 0.0)
+
         out[matchup] = {
             "total_fights": total_fights,
             "win_rates": {
@@ -292,26 +393,24 @@ def _aggregate_real_metrics(reports: list[dict[str, Any]]) -> dict[str, dict[str
             },
             "turn_stats": {"average": avg_turns, "median": med_turns},
             "action_usage_per_fighter": {
-                "attacker": {
-                    "shield_bash": action_counts.get("SHIELD_BASH", 0) / total_fights,
-                    "net_throw": action_counts.get("NET_THROW", 0) / total_fights,
-                    "recover": action_counts.get("RECOVER", 0) / total_fights,
-                },
-                "defender": {
-                    "shield_bash": action_counts.get("SHIELD_BASH", 0) / total_fights,
-                    "net_throw": action_counts.get("NET_THROW", 0) / total_fights,
-                    "recover": action_counts.get("RECOVER", 0) / total_fights,
-                },
+                "attacker": attacker_actions,
+                "defender": defender_actions,
             },
             "combat_pattern_metrics": {
                 "avg_stuns_applied": status_counts.get("STUNNED", 0) / total_fights,
                 "avg_turns_lost_to_stun": None,
                 "avg_entangled_applications": status_counts.get("ENTANGLED", 0) / total_fights,
-                "avg_recover_usage": action_counts.get("RECOVER", 0) / total_fights,
+                "avg_recover_usage": avg_recover_usage,
                 "avg_off_balance_consumptions": None,
                 "avg_focused_consumptions": None,
                 "avg_crit_count": None,
                 "avg_miss_count": misses / total_fights,
+            },
+            "action_usage_data_quality": {
+                "source": action_source,
+                "reports_with_per_fighter_actions": fights_with_per_fighter_actions,
+                "reports_with_legacy_combined_only": fights_with_legacy_combined_only,
+                "notes": action_notes,
             },
             "winner_remaining_hp_avg": (winner_hp_num / winner_hp_den) if winner_hp_den else None,
             "outcome_type_counts": {
@@ -358,20 +457,26 @@ def _delta(a: float | None, b: float | None) -> float | None:
     return a - b
 
 
-def _action_drift(sim: dict[str, Any], real: dict[str, Any]) -> float:
+def _action_drift(sim: dict[str, Any], real: dict[str, Any]) -> float | None:
     keys = ("shield_bash", "net_throw", "recover")
     diffs: list[float] = []
     for side in ("attacker", "defender"):
         sa = sim.get("action_usage_per_fighter", {}).get(side, {})
         ra = real.get("action_usage_per_fighter", {}).get(side, {})
         for key in keys:
-            diffs.append(abs(float(sa.get(key, 0.0)) - float(ra.get(key, 0.0))))
-    return sum(diffs) / max(1, len(diffs))
+            sim_v = _safe_float(sa.get(key))
+            real_v = _safe_float(ra.get(key))
+            if sim_v is None or real_v is None:
+                continue
+            diffs.append(abs(sim_v - real_v))
+    if not diffs:
+        return None
+    return sum(diffs) / len(diffs)
 
 
-def _score_component(delta_abs: float | None, scale: float) -> float:
+def _score_component(delta_abs: float | None, scale: float) -> float | None:
     if delta_abs is None:
-        return 0.5
+        return None
     return max(0.0, 1.0 - min(1.0, delta_abs / max(0.001, scale)))
 
 
@@ -384,7 +489,7 @@ def _calibration_score(sim: dict[str, Any], real: dict[str, Any]) -> tuple[float
     recover_delta = abs(_delta(sim.get("combat_pattern_metrics", {}).get("avg_recover_usage"), real.get("combat_pattern_metrics", {}).get("avg_recover_usage")) or 0.0)
     action_delta = _action_drift(sim, real)
 
-    components = {
+    raw_components = {
         "winrate": _score_component(win_delta, 20.0),
         "avg_turns": _score_component(avg_turn_delta, 8.0),
         "median_turns": _score_component(med_turn_delta, 8.0),
@@ -393,28 +498,41 @@ def _calibration_score(sim: dict[str, Any], real: dict[str, Any]) -> tuple[float
         "recover_pattern": _score_component(recover_delta, 2.5),
         "entangle_pattern": _score_component(entangle_delta, 2.5),
     }
-    weighted = (
-        components["winrate"] * 0.35
-        + components["avg_turns"] * 0.2
-        + components["median_turns"] * 0.1
-        + components["action_distribution"] * 0.15
-        + components["stun_pattern"] * 0.08
-        + components["recover_pattern"] * 0.06
-        + components["entangle_pattern"] * 0.06
-    )
-    return round(weighted * 100.0, 2), components
+    weights = {
+        "winrate": 0.35,
+        "avg_turns": 0.2,
+        "median_turns": 0.1,
+        "action_distribution": 0.15,
+        "stun_pattern": 0.08,
+        "recover_pattern": 0.06,
+        "entangle_pattern": 0.06,
+    }
+    active = {k: v for k, v in raw_components.items() if v is not None}
+    if not active:
+        return 0.0, {k: 0.0 for k in weights}
+    active_weight_total = sum(weights[k] for k in active)
+    weighted = sum(float(active[k]) * weights[k] for k in active) / max(active_weight_total, 1e-9)
+    return round(weighted * 100.0, 2), {k: float(raw_components[k]) if raw_components[k] is not None else 0.0 for k in weights}
 
 
 def _severity(deltas: dict[str, float | None], thresholds: dict[str, float]) -> str:
-    checks = [
-        (abs(deltas.get("winrate_delta", 0.0) or 0.0), thresholds["winrate_good_pct"], thresholds["winrate_close_pct"]),
-        (abs(deltas.get("avg_turn_delta", 0.0) or 0.0), thresholds["avg_turns_good"], thresholds["avg_turns_close"]),
-        (abs(deltas.get("action_drift", 0.0) or 0.0), thresholds["action_good"], thresholds["action_close"]),
-        (abs(deltas.get("stun_turn_delta", 0.0) or 0.0), thresholds["stun_good"], thresholds["stun_close"]),
-        (abs(deltas.get("entangle_delta", 0.0) or 0.0), thresholds["entangle_good"], thresholds["entangle_close"]),
-        (abs(deltas.get("crit_delta", 0.0) or 0.0), thresholds["crit_good"], thresholds["crit_close"]),
-        (abs(deltas.get("miss_delta", 0.0) or 0.0), thresholds["miss_good"], thresholds["miss_close"]),
+    checks: list[tuple[float, float, float]] = []
+    metric_defs = [
+        ("winrate_delta", "winrate_good_pct", "winrate_close_pct"),
+        ("avg_turn_delta", "avg_turns_good", "avg_turns_close"),
+        ("action_drift", "action_good", "action_close"),
+        ("stun_turn_delta", "stun_good", "stun_close"),
+        ("entangle_delta", "entangle_good", "entangle_close"),
+        ("crit_delta", "crit_good", "crit_close"),
+        ("miss_delta", "miss_good", "miss_close"),
     ]
+    for key, good_key, close_key in metric_defs:
+        value = _safe_float(deltas.get(key))
+        if value is None:
+            continue
+        checks.append((abs(value), thresholds[good_key], thresholds[close_key]))
+    if not checks:
+        return "NO COMPARABLE METRICS"
     if all(v <= good for v, good, _ in checks):
         return "GOOD"
     if all(v <= close for v, _, close in checks):
@@ -479,6 +597,8 @@ def validate_against_godot_logs(
         real_metrics = godot_metrics.get(matchup_key)
 
         if real_metrics:
+            action_data_quality = real_metrics.get("action_usage_data_quality", {})
+            action_source = action_data_quality.get("source", "unknown")
             deltas = {
                 "winrate_delta": _delta(sim_metrics["win_rates"].get("attacker_pct"), real_metrics["win_rates"].get("attacker_pct")),
                 "avg_turn_delta": _delta(sim_metrics["turn_stats"].get("average"), real_metrics["turn_stats"].get("average")),
@@ -492,6 +612,8 @@ def validate_against_godot_logs(
                 "miss_delta": _delta(sim_metrics["combat_pattern_metrics"].get("avg_miss_count"), real_metrics["combat_pattern_metrics"].get("avg_miss_count")),
                 "action_drift": _action_drift(sim_metrics, real_metrics),
             }
+            if deltas["action_drift"] is None:
+                deltas["action_drift_note"] = f"skipped ({action_source})"
             calibration_score, component_scores = _calibration_score(sim_metrics, real_metrics)
             severity = _severity(deltas, thresholds)
             weight = int(real_metrics.get("total_fights", 0))
@@ -510,6 +632,10 @@ def validate_against_godot_logs(
             "calibration_score": calibration_score,
             "calibration_components": component_scores,
             "drift_severity": severity,
+            "parser_diagnostics": {
+                "action_usage_source": (real_metrics or {}).get("action_usage_data_quality", {}).get("source"),
+                "action_usage_notes": (real_metrics or {}).get("action_usage_data_quality", {}).get("notes", []),
+            },
         }
 
         if sample_logs:
