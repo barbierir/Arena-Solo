@@ -137,6 +137,127 @@ theme_override_colors/font_color = Color(0.86, 0.2, 0.2, 1)
 text = "GAME OVER: Nessun gladiatore vivo nel roster."
 visible = false
 
+[node name="BatchHarnessPanel" type="PanelContainer" parent="Margin/RootVBox"]
+layout_mode = 2
+
+[node name="BatchHarnessMargin" type="MarginContainer" parent="Margin/RootVBox/BatchHarnessPanel"]
+layout_mode = 2
+theme_override_constants/margin_left = 10
+theme_override_constants/margin_top = 8
+theme_override_constants/margin_right = 10
+theme_override_constants/margin_bottom = 8
+
+[node name="BatchHarnessVBox" type="VBoxContainer" parent="Margin/RootVBox/BatchHarnessPanel/BatchHarnessMargin"]
+layout_mode = 2
+theme_override_constants/separation = 6
+
+[node name="BatchHarnessTitle" type="Label" parent="Margin/RootVBox/BatchHarnessPanel/BatchHarnessMargin/BatchHarnessVBox"]
+layout_mode = 2
+text = "Developer Batch Simulation (Balance / Validator)"
+
+[node name="BatchToggleButton" type="Button" parent="Margin/RootVBox/BatchHarnessPanel/BatchHarnessMargin/BatchHarnessVBox"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Show Batch Simulator"
+
+[node name="BatchPanelBody" type="VBoxContainer" parent="Margin/RootVBox/BatchHarnessPanel/BatchHarnessMargin/BatchHarnessVBox"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+theme_override_constants/separation = 6
+
+[node name="BatchBuildRow" type="HBoxContainer" parent="Margin/RootVBox/BatchHarnessPanel/BatchHarnessMargin/BatchHarnessVBox/BatchPanelBody"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="BatchAttackerLabel" type="Label" parent="Margin/RootVBox/BatchHarnessPanel/BatchHarnessMargin/BatchHarnessVBox/BatchPanelBody/BatchBuildRow"]
+layout_mode = 2
+text = "Attacker"
+
+[node name="BatchAttackerSelector" type="OptionButton" parent="Margin/RootVBox/BatchHarnessPanel/BatchHarnessMargin/BatchHarnessVBox/BatchPanelBody/BatchBuildRow"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="BatchDefenderLabel" type="Label" parent="Margin/RootVBox/BatchHarnessPanel/BatchHarnessMargin/BatchHarnessVBox/BatchPanelBody/BatchBuildRow"]
+layout_mode = 2
+text = "Defender"
+
+[node name="BatchDefenderSelector" type="OptionButton" parent="Margin/RootVBox/BatchHarnessPanel/BatchHarnessMargin/BatchHarnessVBox/BatchPanelBody/BatchBuildRow"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="BatchInputsRow" type="HBoxContainer" parent="Margin/RootVBox/BatchHarnessPanel/BatchHarnessMargin/BatchHarnessVBox/BatchPanelBody"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="BatchSeedLabel" type="Label" parent="Margin/RootVBox/BatchHarnessPanel/BatchHarnessMargin/BatchHarnessVBox/BatchPanelBody/BatchInputsRow"]
+layout_mode = 2
+text = "Seed"
+
+[node name="BatchSeedInput" type="LineEdit" parent="Margin/RootVBox/BatchHarnessPanel/BatchHarnessMargin/BatchHarnessVBox/BatchPanelBody/BatchInputsRow"]
+unique_name_in_owner = true
+layout_mode = 2
+custom_minimum_size = Vector2(96, 0)
+text = "1001"
+
+[node name="BatchCountLabel" type="Label" parent="Margin/RootVBox/BatchHarnessPanel/BatchHarnessMargin/BatchHarnessVBox/BatchPanelBody/BatchInputsRow"]
+layout_mode = 2
+text = "Runs"
+
+[node name="BatchCountInput" type="LineEdit" parent="Margin/RootVBox/BatchHarnessPanel/BatchHarnessMargin/BatchHarnessVBox/BatchPanelBody/BatchInputsRow"]
+unique_name_in_owner = true
+layout_mode = 2
+custom_minimum_size = Vector2(96, 0)
+text = "1000"
+
+[node name="BatchMaxTurnsLabel" type="Label" parent="Margin/RootVBox/BatchHarnessPanel/BatchHarnessMargin/BatchHarnessVBox/BatchPanelBody/BatchInputsRow"]
+layout_mode = 2
+text = "Max Turns"
+
+[node name="BatchMaxTurnsInput" type="LineEdit" parent="Margin/RootVBox/BatchHarnessPanel/BatchHarnessMargin/BatchHarnessVBox/BatchPanelBody/BatchInputsRow"]
+unique_name_in_owner = true
+layout_mode = 2
+custom_minimum_size = Vector2(96, 0)
+text = "128"
+
+[node name="BatchActionsRow" type="HBoxContainer" parent="Margin/RootVBox/BatchHarnessPanel/BatchHarnessMargin/BatchHarnessVBox/BatchPanelBody"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="RunBatchButton" type="Button" parent="Margin/RootVBox/BatchHarnessPanel/BatchHarnessMargin/BatchHarnessVBox/BatchPanelBody/BatchActionsRow"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Run Batch"
+
+[node name="SaveBatchButton" type="Button" parent="Margin/RootVBox/BatchHarnessPanel/BatchHarnessMargin/BatchHarnessVBox/BatchPanelBody/BatchActionsRow"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Save Batch Report"
+
+[node name="RunCanonicalSuiteButton" type="Button" parent="Margin/RootVBox/BatchHarnessPanel/BatchHarnessMargin/BatchHarnessVBox/BatchPanelBody/BatchActionsRow"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Run Canonical Suite"
+
+[node name="BatchStatusLabel" type="Label" parent="Margin/RootVBox/BatchHarnessPanel/BatchHarnessMargin/BatchHarnessVBox/BatchPanelBody"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Batch Status: Ready"
+
+[node name="BatchSavedPathLabel" type="Label" parent="Margin/RootVBox/BatchHarnessPanel/BatchHarnessMargin/BatchHarnessVBox/BatchPanelBody"]
+unique_name_in_owner = true
+layout_mode = 2
+autowrap_mode = 2
+text = "Last Saved: (none)"
+
+[node name="BatchReportDirLabel" type="Label" parent="Margin/RootVBox/BatchHarnessPanel/BatchHarnessMargin/BatchHarnessVBox/BatchPanelBody"]
+unique_name_in_owner = true
+layout_mode = 2
+autowrap_mode = 2
+text = "Reports Dir: user://batch_reports"
+
 [node name="ContentRow" type="HSplitContainer" parent="Margin/RootVBox"]
 layout_mode = 2
 size_flags_vertical = 3
@@ -422,6 +543,10 @@ text = "New Game"
 [connection signal="pressed" from="Margin/RootVBox/ActionsPanel/ActionsMargin/Buttons/StartFightButton" to="." method="_on_start_fight_pressed"]
 [connection signal="pressed" from="Margin/RootVBox/ActionsPanel/ActionsMargin/Buttons/SaveButton" to="." method="_on_save_pressed"]
 [connection signal="pressed" from="Margin/RootVBox/ActionsPanel/ActionsMargin/Buttons/LoadButton" to="." method="_on_load_pressed"]
+[connection signal="pressed" from="Margin/RootVBox/BatchHarnessPanel/BatchHarnessMargin/BatchHarnessVBox/BatchToggleButton" to="." method="_on_batch_toggle_pressed"]
+[connection signal="pressed" from="Margin/RootVBox/BatchHarnessPanel/BatchHarnessMargin/BatchHarnessVBox/BatchPanelBody/BatchActionsRow/RunBatchButton" to="." method="_on_run_batch_pressed"]
+[connection signal="pressed" from="Margin/RootVBox/BatchHarnessPanel/BatchHarnessMargin/BatchHarnessVBox/BatchPanelBody/BatchActionsRow/SaveBatchButton" to="." method="_on_save_batch_report_pressed"]
+[connection signal="pressed" from="Margin/RootVBox/BatchHarnessPanel/BatchHarnessMargin/BatchHarnessVBox/BatchPanelBody/BatchActionsRow/RunCanonicalSuiteButton" to="." method="_on_run_canonical_suite_pressed"]
 [connection signal="item_selected" from="Margin/RootVBox/ContentRow/RosterPanel/RosterMargin/RosterVBox/RosterList" to="." method="_on_roster_list_item_selected"]
 [connection signal="pressed" from="NarrativeEventOverlay/CenterContainer/Panel/Margin/VBox/NarrativeChoices/NarrativeChoiceAButton" to="." method="_on_narrative_choice_a_pressed"]
 [connection signal="pressed" from="NarrativeEventOverlay/CenterContainer/Panel/Margin/VBox/NarrativeChoices/NarrativeChoiceBButton" to="." method="_on_narrative_choice_b_pressed"]

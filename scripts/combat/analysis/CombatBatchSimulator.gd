@@ -53,6 +53,7 @@ func run_batch(attacker_build_id: String, defender_build_id: String, start_seed:
 
 		_accumulate_outcome_counts(result, runtime_state)
 		_accumulate_events(result, runtime_state.combat_events, skill_entries)
+		_accumulate_log_metrics(result, runtime_state.combat_log)
 		_accumulate_match_outcomes(result, attacker_state, defender_state, runtime_state)
 
 	result.turn_stats.min = min_turns
@@ -66,6 +67,10 @@ func run_batch(attacker_build_id: String, defender_build_id: String, start_seed:
 	var defender_wins: int = int(result.wins.defender)
 	result.win_rates.attacker_pct = (float(attacker_wins) * 100.0) / float(run_count)
 	result.win_rates.defender_pct = (float(defender_wins) * 100.0) / float(run_count)
+	var aggregate: Dictionary = result.get("aggregate_metrics", {})
+	var winner_count: int = int(aggregate.get("winner_count", 0))
+	if winner_count > 0:
+		aggregate.winner_remaining_hp_average = float(aggregate.get("winner_remaining_hp_total", 0)) / float(winner_count)
 	return result
 
 func _make_initial_result(attacker_build_id: String, defender_build_id: String, start_seed: int, simulation_count: int, max_turns: int, seeds_used: Array[int]) -> Dictionary:
@@ -106,6 +111,18 @@ func _make_initial_result(attacker_build_id: String, defender_build_id: String, 
 		},
 		"action_usage_counts": {},
 		"status_application_counts": {},
+		"aggregate_metrics": {
+			"turns_lost_to_stun": {"A": 0, "B": 0},
+			"focused": {"gained": {"A": 0, "B": 0}, "consumed": {"A": 0, "B": 0}},
+			"off_balance": {"applied": {"A": 0, "B": 0}, "consumed": {"A": 0, "B": 0}},
+			"crit_count": {"A": 0, "B": 0},
+			"miss_count": {"A": 0, "B": 0},
+			"entangled_applications_received": {"A": 0, "B": 0},
+			"recover_usage": {"A": 0, "B": 0},
+			"winner_remaining_hp_total": 0,
+			"winner_count": 0,
+			"winner_remaining_hp_average": 0.0,
+		},
 		"fighters": {
 			"attacker": _make_fighter_metrics("A", attacker_build_id),
 			"defender": _make_fighter_metrics("B", defender_build_id),
@@ -171,6 +188,7 @@ func _accumulate_outcome_counts(result: Dictionary, runtime_state: CombatRuntime
 func _accumulate_events(result: Dictionary, combat_events: Array[Dictionary], skill_entries: Dictionary) -> void:
 	var attacker_metrics: Dictionary = result.get("fighters", {}).get("attacker", {})
 	var defender_metrics: Dictionary = result.get("fighters", {}).get("defender", {})
+	var aggregate: Dictionary = result.get("aggregate_metrics", {})
 	for event in combat_events:
 		var event_type: String = str(event.get("type", ""))
 		if event_type == "ACTION_USED":
@@ -188,7 +206,12 @@ func _accumulate_events(result: Dictionary, combat_events: Array[Dictionary], sk
 					actor_metrics.hit_count = int(actor_metrics.hit_count) + 1
 				else:
 					actor_metrics.miss_count = int(actor_metrics.miss_count) + 1
+					_increment_side_count(aggregate.get("miss_count", {}), actor_side_id)
 				actor_metrics.damage_dealt_total = int(actor_metrics.damage_dealt_total) + int(event.get("damage", 0))
+				if bool(event.get("is_crit", false)):
+					_increment_side_count(aggregate.get("crit_count", {}), actor_side_id)
+				if skill_id == "RECOVER":
+					_increment_side_count(aggregate.get("recover_usage", {}), actor_side_id)
 			if not target_metrics.is_empty():
 				target_metrics.damage_taken_total = int(target_metrics.damage_taken_total) + int(event.get("damage", 0))
 		elif event_type == "STATUS_APPLIED":
@@ -198,6 +221,8 @@ func _accumulate_events(result: Dictionary, combat_events: Array[Dictionary], sk
 			var target_metrics: Dictionary = _fighter_metrics(result, target_side_id)
 			if not target_metrics.is_empty():
 				_increment_count(target_metrics.status_application_counts, status_id)
+			if status_id == "ENTANGLED":
+				_increment_side_count(aggregate.get("entangled_applications_received", {}), target_side_id)
 		elif event_type == "TURN_TELEMETRY" and str(event.get("phase", "")) == "END_OF_TURN":
 			var actor_side: String = str(event.get("actor_side_id", ""))
 			var target_side: String = str(event.get("target_side_id", ""))
@@ -209,6 +234,24 @@ func _accumulate_events(result: Dictionary, combat_events: Array[Dictionary], sk
 	result.fighters.attacker = attacker_metrics
 	result.fighters.defender = defender_metrics
 	_finalize_fighter_averages(result)
+
+func _accumulate_log_metrics(result: Dictionary, combat_log: Array[String]) -> void:
+	var aggregate: Dictionary = result.get("aggregate_metrics", {})
+	for line in combat_log:
+		var text: String = str(line)
+		var side_id: String = "A" if text.begins_with("A ") else ("B" if text.begins_with("B ") else "")
+		if side_id == "":
+			continue
+		if "is stunned and loses the turn." in text:
+			_increment_side_count(aggregate.get("turns_lost_to_stun", {}), side_id)
+		if "Recover grants Focused." in text:
+			_increment_side_count(aggregate.get("focused", {}).get("gained", {}), side_id)
+		if "spends Focused" in text:
+			_increment_side_count(aggregate.get("focused", {}).get("consumed", {}), side_id)
+		if "becomes Off-Balance" in text:
+			_increment_side_count(aggregate.get("off_balance", {}).get("applied", {}), side_id)
+		if "Off-Balance reduces damage" in text:
+			_increment_side_count(aggregate.get("off_balance", {}).get("consumed", {}), side_id)
 
 func _accumulate_turn_survival(result: Dictionary, side_id: String, sta_after: int) -> void:
 	var metrics: Dictionary = _fighter_metrics(result, side_id)
@@ -236,6 +279,7 @@ func _accumulate_status_uptime(result: Dictionary, side_id: String, active_statu
 func _accumulate_match_outcomes(result: Dictionary, attacker_state: CombatantRuntimeState, defender_state: CombatantRuntimeState, runtime_state: CombatRuntimeState) -> void:
 	var attacker_metrics: Dictionary = _fighter_metrics(result, "A")
 	var defender_metrics: Dictionary = _fighter_metrics(result, "B")
+	var aggregate: Dictionary = result.get("aggregate_metrics", {})
 	var attacker_won: bool = runtime_state.winner_combatant_id == "A"
 	var defender_won: bool = runtime_state.winner_combatant_id == "B"
 	if attacker_won:
@@ -245,6 +289,8 @@ func _accumulate_match_outcomes(result: Dictionary, attacker_state: CombatantRun
 		attacker_metrics.remaining_sta_in_wins_total = int(attacker_metrics.remaining_sta_in_wins_total) + attacker_state.current_sta
 		defender_metrics.remaining_hp_in_losses_total = int(defender_metrics.remaining_hp_in_losses_total) + defender_state.current_hp
 		defender_metrics.remaining_sta_in_losses_total = int(defender_metrics.remaining_sta_in_losses_total) + defender_state.current_sta
+		aggregate.winner_remaining_hp_total = int(aggregate.get("winner_remaining_hp_total", 0)) + attacker_state.current_hp
+		aggregate.winner_count = int(aggregate.get("winner_count", 0)) + 1
 	elif defender_won:
 		defender_metrics.wins = int(defender_metrics.wins) + 1
 		attacker_metrics.losses = int(attacker_metrics.losses) + 1
@@ -252,6 +298,8 @@ func _accumulate_match_outcomes(result: Dictionary, attacker_state: CombatantRun
 		defender_metrics.remaining_sta_in_wins_total = int(defender_metrics.remaining_sta_in_wins_total) + defender_state.current_sta
 		attacker_metrics.remaining_hp_in_losses_total = int(attacker_metrics.remaining_hp_in_losses_total) + attacker_state.current_hp
 		attacker_metrics.remaining_sta_in_losses_total = int(attacker_metrics.remaining_sta_in_losses_total) + attacker_state.current_sta
+		aggregate.winner_remaining_hp_total = int(aggregate.get("winner_remaining_hp_total", 0)) + defender_state.current_hp
+		aggregate.winner_count = int(aggregate.get("winner_count", 0)) + 1
 
 func _finalize_fighter_averages(result: Dictionary) -> void:
 	var total_runs: int = maxi(1, int(result.get("total_runs", 0)))
@@ -290,6 +338,11 @@ func _other_side_id(side_id: String) -> String:
 
 func _increment_count(target: Dictionary, key: String) -> void:
 	target[key] = int(target.get(key, 0)) + 1
+
+func _increment_side_count(target: Dictionary, side_id: String) -> void:
+	if side_id != "A" and side_id != "B":
+		return
+	target[side_id] = int(target.get(side_id, 0)) + 1
 
 func batch_result_to_report_dict(batch_result: Dictionary, build_entries: Dictionary = {}, exported_at_iso_utc: String = "") -> Dictionary:
 	var inputs: Dictionary = batch_result.get("inputs", {})
@@ -349,6 +402,9 @@ func format_batch_result_text(batch_result: Dictionary, build_entries: Dictionar
 	lines.append_array(_fighter_diagnostics_lines(batch_result.get("fighters", {}).get("attacker", {}), "A", attacker_name))
 	lines.append("")
 	lines.append_array(_fighter_diagnostics_lines(batch_result.get("fighters", {}).get("defender", {}), "B", defender_name))
+	lines.append("")
+	lines.append("Extended Aggregate Metrics:")
+	lines.append_array(_extended_aggregate_lines(batch_result.get("aggregate_metrics", {}), total_runs))
 	return "\n".join(lines)
 
 func save_batch_report(batch_result: Dictionary, build_entries: Dictionary = {}) -> Dictionary:
@@ -386,10 +442,10 @@ func save_batch_report(batch_result: Dictionary, build_entries: Dictionary = {})
 
 func save_standard_suite_reports(start_seed: int, simulation_count: int, max_turns: int, build_entries: Dictionary = {}) -> Dictionary:
 	var suite: Array[Dictionary] = [
-		{"label": "SEC_vs_SEC", "a": "SEC_STARTER", "b": "SEC_STARTER"},
 		{"label": "RET_vs_RET", "a": "RET_STARTER", "b": "RET_STARTER"},
-		{"label": "SEC_vs_RET", "a": "SEC_STARTER", "b": "RET_STARTER"},
+		{"label": "SEC_vs_SEC", "a": "SEC_STARTER", "b": "SEC_STARTER"},
 		{"label": "RET_vs_SEC", "a": "RET_STARTER", "b": "SEC_STARTER"},
+		{"label": "SEC_vs_RET", "a": "SEC_STARTER", "b": "RET_STARTER"},
 	]
 	var saved_reports: Array[Dictionary] = []
 	for matchup in suite:
@@ -446,12 +502,11 @@ func _unique_report_base_name(batch_result: Dictionary) -> String:
 	var defender_id: String = _sanitize_filename_token(str(inputs.get("defender_build_id", "DEFENDER")))
 	var start_seed: int = int(inputs.get("start_seed", 0))
 	var run_count: int = int(batch_result.get("total_runs", 0))
-	var base_name: String = "%s_%s_vs_%s_seed%d_runs%d" % [
-		_timestamp_for_filename(),
+	var base_name: String = "batch_%s_vs_%s_%d_seed%d" % [
 		attacker_id,
 		defender_id,
-		start_seed,
 		run_count,
+		start_seed,
 	]
 	var candidate: String = base_name
 	var suffix: int = 1
@@ -511,6 +566,43 @@ func _sorted_count_lines(counts_variant: Variant) -> Array[String]:
 	var lines: Array[String] = []
 	for key in keys:
 		lines.append("- %s: %d" % [key, int(counts.get(key, 0))])
+	return lines
+
+func _extended_aggregate_lines(aggregate_metrics: Dictionary, total_runs: int) -> Array[String]:
+	if aggregate_metrics.is_empty():
+		return ["- (none)"]
+	var runs: int = maxi(1, total_runs)
+	var lines: Array[String] = []
+	var stun: Dictionary = aggregate_metrics.get("turns_lost_to_stun", {})
+	var focused: Dictionary = aggregate_metrics.get("focused", {})
+	var off_balance: Dictionary = aggregate_metrics.get("off_balance", {})
+	var crit: Dictionary = aggregate_metrics.get("crit_count", {})
+	var miss: Dictionary = aggregate_metrics.get("miss_count", {})
+	var entangled: Dictionary = aggregate_metrics.get("entangled_applications_received", {})
+	var recover: Dictionary = aggregate_metrics.get("recover_usage", {})
+	lines.append("- Turns lost to stun (A/B): %d / %d" % [int(stun.get("A", 0)), int(stun.get("B", 0))])
+	lines.append("- Focused gained (A/B): %d / %d" % [
+		int(focused.get("gained", {}).get("A", 0)),
+		int(focused.get("gained", {}).get("B", 0)),
+	])
+	lines.append("- Focused consumed (A/B): %d / %d" % [
+		int(focused.get("consumed", {}).get("A", 0)),
+		int(focused.get("consumed", {}).get("B", 0)),
+	])
+	lines.append("- Off-Balance applied (A/B): %d / %d" % [
+		int(off_balance.get("applied", {}).get("A", 0)),
+		int(off_balance.get("applied", {}).get("B", 0)),
+	])
+	lines.append("- Off-Balance consumed (A/B): %d / %d" % [
+		int(off_balance.get("consumed", {}).get("A", 0)),
+		int(off_balance.get("consumed", {}).get("B", 0)),
+	])
+	lines.append("- Crit count (A/B): %d / %d" % [int(crit.get("A", 0)), int(crit.get("B", 0))])
+	lines.append("- Miss count (A/B): %d / %d" % [int(miss.get("A", 0)), int(miss.get("B", 0))])
+	lines.append("- Entangled applications received (A/B): %d / %d" % [int(entangled.get("A", 0)), int(entangled.get("B", 0))])
+	lines.append("- Recover usage (A/B): %d / %d" % [int(recover.get("A", 0)), int(recover.get("B", 0))])
+	lines.append("- Avg winner remaining HP: %.2f" % float(aggregate_metrics.get("winner_remaining_hp_average", 0.0)))
+	lines.append("- Avg turns lost to stun per match: %.4f" % (float(int(stun.get("A", 0)) + int(stun.get("B", 0))) / float(runs)))
 	return lines
 
 func _fighter_diagnostics_lines(metrics: Dictionary, side_id: String, display_name: String) -> Array[String]:
