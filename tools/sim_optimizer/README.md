@@ -22,7 +22,7 @@ Standalone local tool for fast combat-balance iteration without launching Godot.
 - `engine.py` – combat execution (turn flow, stamina, hit/crit, damage, statuses, cooldowns, victory)
 - `simulate.py` – single matchup and suite batch runners
 - `metrics.py` – aggregate result shaping
-- `validate.py` – compare Python suite outputs to Godot batch report JSONs
+- `validate.py` – parse Godot text reports, aggregate matchup metrics, and compare drift vs simulator
 - `optimize.py` – bounded grid/random candidate search and scoring
 - `cli.py` – argparse entrypoint
 - `matchup_modifiers.py` – centralized matchup-specific modifier loading
@@ -102,17 +102,62 @@ How to disable:
 - Add `--no-matchup-modifiers` to `simulate`, `optimize`, or `validate`.
 - This is useful for validation baselines against historical Godot reports.
 
-## Validation against Godot batch reports
+## Validation against Godot text batch logs
 
-If existing Godot report JSON files are available (one JSON per matchup, each with `inputs.attacker_build_id` and `inputs.defender_build_id`), place them in a folder (default: `batch_reports/`) and run:
+Expected folder contents:
+
+- one or more `*.txt` files exported by `CombatBatchSimulator.save_batch_report(...)`
+- each file should include the standard `GLADIUS Batch Report` text sections (`Inputs`, `Summary`, `Ability Usage`, `Status Applications`, `Per-Fighter Diagnostics`)
+
+Run validation:
 
 ```bash
-python -m tools.sim_optimizer.cli validate --reference-dir batch_reports --runs 1000 --seed 6100
+python -m tools.sim_optimizer.cli validate --godot-log-dir batch_reports --runs 1000 --seed 6100
 ```
 
-Output includes per-matchup Python metrics, reference metrics, and deltas.
+Export for spreadsheet/manual balancing review:
 
-If no reference files are present, the command still runs and reports `No reference report JSON found for this matchup.`
+```bash
+python -m tools.sim_optimizer.cli validate --godot-log-dir batch_reports --runs 1500 --export-csv out/validation.csv --export-json out/validation.json
+```
+
+Drift-focused view with sample-size filter and representative simulator samples:
+
+```bash
+python -m tools.sim_optimizer.cli validate --godot-log-dir batch_reports --min-sample-size 100 --top-drift 3 --sample-logs
+```
+
+Compared metrics include matchup-level:
+
+- win tendency (`attacker_pct` delta)
+- pacing (`avg turns` and `median turns` deltas)
+- action pattern deltas (`shield_bash`, `net_throw`, `recover`)
+- control pattern deltas (`stun`, `entangle`, `recover`, misses, crits when available)
+- drift severity classification (`GOOD`, `CLOSE`, `NEEDS REVIEW`, `HIGH DRIFT`)
+
+### Calibration score (per matchup and overall)
+
+The validator reports a `calibration_score` in `[0, 100]`.
+
+It is a weighted sum of closeness components:
+
+- winrate closeness (35%)
+- average turns closeness (20%)
+- median turns closeness (10%)
+- action distribution closeness across shield bash / net throw / recover (15%)
+- stun pattern closeness (8%)
+- recover pattern closeness (6%)
+- entangle pattern closeness (6%)
+
+Each component uses `1 - min(1, abs(delta)/scale)` and is then weighted.
+Overall score is a fight-count-weighted average over matchup scores.
+
+Recommended balancing loop:
+
+1. collect fresh Godot batch text logs from current build
+2. run `validate` and inspect top drift matchups + CSV
+3. tune data/rules in simulator only when drift is acceptable
+4. confirm tuned changes in Godot and refresh logs
 
 ## Optimizer
 
@@ -167,7 +212,7 @@ Mirrors current Godot logic for:
 Known differences:
 
 1. RNG generator is Python `random.Random`, not Godot `RandomNumberGenerator`; exact per-seed event stream will differ.
-2. Validation references are external runtime artifacts; this repo currently does not include historical Godot batch JSON outputs by default.
+2. Validation references are external runtime artifacts; this repo currently does not include historical Godot batch text outputs by default.
 3. The simulator now emits richer aggregate metrics and pathology indicators, but it still does not emulate Godot RNG internals exactly.
 
 ## Example artifacts
