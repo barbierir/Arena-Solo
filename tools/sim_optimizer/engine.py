@@ -81,11 +81,18 @@ class CombatEngine:
         })
 
         if self._status_skip_turn(actor):
+            actor.was_stunned_last_turn = True
+            runtime.append_event("TURN_SKIPPED", {
+                "actor_side_id": actor.combatant_id,
+                "reason": "STATUS_SKIP",
+                "active_status_ids": [s.status_id for s in actor.active_statuses],
+            })
             self._tick_status_durations(actor)
             dot = self._apply_end_of_turn_dot(actor)
             self._resolve_victory(runtime)
             self._append_end_turn(runtime, actor, target, dot)
             return
+        actor.was_stunned_last_turn = False
 
         skill_id = choose_action(actor, target)
         skill = self.defs.skills.get(skill_id, self.defs.skills["BASIC_ATTACK"])
@@ -134,7 +141,6 @@ class CombatEngine:
 
     def _execute_action(self, runtime: CombatRuntime, actor: CombatantState, target: CombatantState, skill_id: str, skill: dict[str, Any]) -> None:
         controls = self.defs.combat_controls
-        statuses = self.defs.status_effects
 
         sta_cost = int(skill.get("sta_cost", 0))
         actor.current_sta = max(0, actor.current_sta - sta_cost)
@@ -142,9 +148,30 @@ class CombatEngine:
 
         if skill_id == "RECOVER":
             gain = int(controls.get("recover_bonus_stamina", 2))
-            recover_multiplier = float(self.matchup_modifiers.get("recover_value_multiplier", 1.0))
-            gain = max(0, round(gain * recover_multiplier))
             actor.current_sta = min(actor.max_sta, actor.current_sta + gain)
+
+            removed_negative_status = ""
+            if self._remove_status(actor, "STUNNED"):
+                removed_negative_status = "STUNNED"
+            elif self._remove_status(actor, "ENTANGLED"):
+                removed_negative_status = "ENTANGLED"
+
+            if removed_negative_status:
+                actor.focused_hit_bonus_pct = 0.0
+                runtime.append_event("STATUS_REMOVED", {
+                    "target_side_id": actor.combatant_id,
+                    "status_id": removed_negative_status,
+                    "source_skill_id": "RECOVER",
+                })
+            else:
+                actor.focused_hit_bonus_pct = float(controls.get("recover_focus_hit_bonus_pct", 0.10))
+                runtime.append_event("STATUS_APPLIED", {
+                    "target_side_id": actor.combatant_id,
+                    "status_id": "FOCUSED",
+                    "source_skill_id": "RECOVER",
+                    "duration_turns": 1,
+                })
+
             runtime.append_event("ACTION_USED", self._action_payload(actor, target, skill_id, False, 0))
             return
 
@@ -153,7 +180,18 @@ class CombatEngine:
             runtime.append_event("ACTION_USED", self._action_payload(actor, target, skill_id, False, 0))
             return
 
-        hit_chance = self._calculate_hit(actor, target, skill, skill_id)
+        conditional_hit_bonus = self._conditional_equipment_hit_bonus(actor, skill_id)
+        if actor.focused_hit_bonus_pct > 0.0:
+            conditional_hit_bonus += actor.focused_hit_bonus_pct
+            runtime.append_event("STATUS_CONSUMED", {
+                "actor_side_id": actor.combatant_id,
+                "status_id": "FOCUSED",
+                "source_skill_id": skill_id,
+                "consumed_amount": actor.focused_hit_bonus_pct,
+            })
+            actor.focused_hit_bonus_pct = 0.0
+
+        hit_chance = self._calculate_hit(actor, target, skill, skill_id, conditional_hit_bonus)
         hit_roll = self.rng.random()
         if hit_roll > hit_chance:
             runtime.append_event("ACTION_USED", self._action_payload(actor, target, skill_id, False, 0))
@@ -161,11 +199,30 @@ class CombatEngine:
             return
 
         base_damage = self._calculate_base_damage(actor, target, skill)
+        if skill_id == "BASIC_ATTACK" and actor.off_balance_damage_penalty <= 0:
+            base_damage += 1
+        if self._is_finisher_window(target):
+            base_damage += int(controls.get("finisher_pressure_bonus_damage", 1))
+
+        if actor.off_balance_damage_penalty > 0:
+            penalty = actor.off_balance_damage_penalty
+            base_damage = max(int(controls.get("min_damage", 1)), base_damage - penalty)
+            runtime.append_event("STATUS_CONSUMED", {
+                "actor_side_id": actor.combatant_id,
+                "status_id": "OFF_BALANCE",
+                "source_skill_id": skill_id,
+                "consumed_amount": penalty,
+            })
+            actor.off_balance_damage_penalty = 0
+
         crit_chance = self._calculate_crit(actor, skill)
+        if skill_id == "SHIELD_BASH" and target.has_status("ENTANGLED"):
+            crit_chance = 0.0
+
         is_crit = self.rng.random() <= crit_chance
         damage = round(base_damage * float(controls.get("crit_multiplier", 2.0))) if is_crit else base_damage
         damage_multiplier = float(self.matchup_modifiers.get("global_damage_multiplier", 1.0))
-        damage = max(int(controls.get("min_damage", 1)), round(damage * damage_multiplier))
+        damage = max(int(controls.get("min_damage", 1)), round(damage * max(0.0, damage_multiplier)))
         target.current_hp = max(0, target.current_hp - damage)
         payload = self._action_payload(actor, target, skill_id, True, damage)
         payload["is_crit"] = is_crit
@@ -177,14 +234,42 @@ class CombatEngine:
 
         status_id = str(skill.get("apply_status_id", ""))
         if status_id:
-            self._apply_status(target, status_id, int(skill.get("status_turns", 0)), skill_id)
+            if status_id == "STUNNED":
+                if target.was_stunned_last_turn:
+                    runtime.append_event("STATUS_APPLICATION_BLOCKED", {
+                        "target_side_id": target.combatant_id,
+                        "status_id": status_id,
+                        "source_skill_id": skill_id,
+                        "reason": "RECENT_STUN_IMMUNITY",
+                    })
+                else:
+                    self._apply_status(target, status_id, int(skill.get("status_turns", 0)), skill_id)
+                    runtime.append_event("STATUS_APPLIED", {
+                        "target_side_id": target.combatant_id,
+                        "target_build_id": target.build_id,
+                        "status_id": status_id,
+                        "source_skill_id": skill_id,
+                        "duration_turns": int(skill.get("status_turns", 0)),
+                    })
+            else:
+                self._apply_status(target, status_id, int(skill.get("status_turns", 0)), skill_id)
+                runtime.append_event("STATUS_APPLIED", {
+                    "target_side_id": target.combatant_id,
+                    "target_build_id": target.build_id,
+                    "status_id": status_id,
+                    "source_skill_id": skill_id,
+                    "duration_turns": int(skill.get("status_turns", 0)),
+                })
+
+        if skill_id == "NET_THROW":
+            actor.off_balance_damage_penalty = int(controls.get("net_throw_off_balance_damage_penalty", 1))
             runtime.append_event("STATUS_APPLIED", {
-                "target_side_id": target.combatant_id,
-                "target_build_id": target.build_id,
-                "status_id": status_id,
-                "source_skill_id": skill_id,
-                "duration_turns": int(skill.get("status_turns", 0)),
+                "target_side_id": actor.combatant_id,
+                "status_id": "OFF_BALANCE",
+                "source_skill_id": "NET_THROW",
+                "duration_turns": 1,
             })
+
         self._set_cooldown(actor, skill_id, skill)
 
     def _action_payload(self, actor: CombatantState, target: CombatantState, skill_id: str, hit: bool, damage: int) -> dict[str, Any]:
@@ -198,16 +283,14 @@ class CombatEngine:
             "damage": damage,
         }
 
-    def _calculate_hit(self, actor: CombatantState, target: CombatantState, skill: dict[str, Any], skill_id: str) -> float:
+    def _calculate_hit(self, actor: CombatantState, target: CombatantState, skill: dict[str, Any], skill_id: str, conditional_hit_bonus: float = 0.0) -> float:
         c = self.defs.combat_controls
         status_defs = self.defs.status_effects
         hit = float(c.get("base_hit_chance", 0.7))
         hit += (actor.effective_atk(status_defs) - target.effective_spd(status_defs)) * float(c.get("hit_delta_per_point", 0.02))
-        hit += float(skill.get("accuracy_mod_pct", 0.0))
-        if skill_id == "NET_THROW":
-            build = self.defs.builds[actor.build_id]
-            offhand = self.defs.equipment.get(build.get("offhand_item_id", ""), {})
-            hit += float(offhand.get("hit_mod_pct", 0.0))
+        hit += float(skill.get("accuracy_mod_pct", 0.0)) + conditional_hit_bonus
+        if target.has_status("ENTANGLED"):
+            hit += float(c.get("entangled_target_hit_bonus_pct", 0.0))
         if target.effective_spd(status_defs) - actor.effective_spd(status_defs) >= 5:
             hit -= float(c.get("dodge_bonus_if_defender_spd_lead_gte5", 0.15))
         return max(float(c.get("min_hit_chance", 0.1)), min(float(c.get("max_hit_chance", 0.95)), hit))
@@ -243,6 +326,17 @@ class CombatEngine:
                 return
         target.active_statuses.append(RuntimeStatus(status_id, turns, source_skill_id))
 
+    def _remove_status(self, actor: CombatantState, status_id: str) -> bool:
+        removed = False
+        remaining: list[RuntimeStatus] = []
+        for status in actor.active_statuses:
+            if not removed and status.status_id == status_id:
+                removed = True
+                continue
+            remaining.append(status)
+        actor.active_statuses = remaining
+        return removed
+
     def _apply_end_of_turn_dot(self, actor: CombatantState) -> int:
         defs = self.defs.status_effects
         dot = sum(int(defs.get(s.status_id, {}).get("dot_damage", 0)) for s in actor.active_statuses)
@@ -272,6 +366,19 @@ class CombatEngine:
         cd = int(skill.get("cooldown_turns", 0))
         if cd > 0:
             actor.cooldowns[skill_id] = cd
+
+    def _is_finisher_window(self, target: CombatantState) -> bool:
+        if target.max_hp <= 0:
+            return False
+        threshold = float(self.defs.combat_controls.get("finisher_hp_ratio_threshold", 0.30))
+        return (float(target.current_hp) / float(target.max_hp)) <= threshold
+
+    def _conditional_equipment_hit_bonus(self, actor: CombatantState, skill_id: str) -> float:
+        if skill_id != "NET_THROW":
+            return 0.0
+        build = self.defs.builds[actor.build_id]
+        offhand = self.defs.equipment.get(build.get("offhand_item_id", ""), {})
+        return float(offhand.get("hit_mod_pct", 0.0))
 
     def _resolve_victory(self, runtime: CombatRuntime) -> None:
         if runtime.result_state != "PENDING":

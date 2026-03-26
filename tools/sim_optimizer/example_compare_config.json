@@ -1,0 +1,21 @@
+{
+  "variants": [
+    {
+      "name": "baseline"
+    },
+    {
+      "name": "anti_stunlock_a",
+      "matchup_modifier_overrides": {
+        "global_damage_multiplier": 1.0
+      },
+      "pathology_thresholds": {
+        "stun_turns_threshold": 2
+      }
+    },
+    {
+      "name": "recover_tweak",
+      "no_matchup_modifiers": false,
+      "seed_offset": 200
+    }
+  ]
+}

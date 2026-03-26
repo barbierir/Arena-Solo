@@ -52,6 +52,9 @@ class CombatantState:
     temporary_defense_bonus: int = 0
     cooldowns: dict[str, int] = field(default_factory=dict)
     active_statuses: list[RuntimeStatus] = field(default_factory=list)
+    focused_hit_bonus_pct: float = 0.0
+    off_balance_damage_penalty: int = 0
+    was_stunned_last_turn: bool = False
 
     def is_alive(self) -> bool:
         return self.current_hp > 0
