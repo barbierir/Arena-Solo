@@ -63,7 +63,7 @@ text = "0"
 
 [node name="DayLabel" type="Label" parent="Margin/RootVBox/ResourcePanel/ResourceMargin/Header"]
 layout_mode = 2
-text = "Day:"
+text = "Turn:"
 
 [node name="DayValue" type="Label" parent="Margin/RootVBox/ResourcePanel/ResourceMargin/Header"]
 unique_name_in_owner = true
@@ -113,7 +113,7 @@ text = "Recruit SEC"
 [node name="AdvanceDayButton" type="Button" parent="Margin/RootVBox/ActionsPanel/ActionsMargin/Buttons"]
 unique_name_in_owner = true
 layout_mode = 2
-text = "Advance Day"
+text = "Advance Turn"
 
 [node name="StartFightButton" type="Button" parent="Margin/RootVBox/ActionsPanel/ActionsMargin/Buttons"]
 unique_name_in_owner = true
@@ -406,7 +406,7 @@ text = "Campaign Result"
 unique_name_in_owner = true
 layout_mode = 2
 horizontal_alignment = 1
-text = "Days: 0\nFame: 0"
+text = "Turns: 0\nFame: 0"
 
 [node name="OverlayNewGameButton" type="Button" parent="EndGameOverlay/CenterContainer/Panel/OverlayMargin/OverlayVBox"]
 unique_name_in_owner = true
