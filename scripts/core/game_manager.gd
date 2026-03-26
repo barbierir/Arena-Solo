@@ -196,13 +196,8 @@ func save_game() -> bool:
 	return true
 
 func advance_day() -> void:
-	if not is_campaign_running():
+	if not can_advance_day():
 		return
-	if has_active_narrative_event():
-		return
-	if has_active_tournament():
-		active_tournament = {}
-		add_recent_event("Tournament expired at day end.")
 	day += 1
 	current_event = generate_daily_event()
 	current_narrative_event = generate_narrative_event()
@@ -217,6 +212,15 @@ func advance_day() -> void:
 	_emit_recent_events_updated()
 	_emit_daily_event_updated()
 	_emit_narrative_event_updated()
+
+func can_advance_day() -> bool:
+	if game_state != STATE_RUNNING:
+		return false
+	if has_active_narrative_event():
+		return false
+	if has_active_tournament():
+		return false
+	return true
 
 func get_roster() -> Array[Dictionary]:
 	return roster.duplicate(true)
