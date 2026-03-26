@@ -26,8 +26,10 @@ const STATE_RESOLVING_FIGHT: String = "resolving_fight"
 const STARTING_GOLD: int = 100
 const STARTING_FAME: int = 0
 const STARTING_DAY: int = 1
+const DEFAULT_CAMPAIGN_LENGTH_TURNS: int = 30
+const STANDARD_CAMPAIGN_VICTORY_MODE: String = "TURN_COUNT_ONLY"
+const ALTERNATE_VICTORY_MODE_TURN_OR_FAME: String = "TURN_OR_FAME"
 const VICTORY_FAME_TARGET: int = 50
-const VICTORY_DAY_TARGET: int = 30
 
 const RECRUIT_COST_RET: int = 30
 const RECRUIT_COST_SEC: int = 30
@@ -141,6 +143,8 @@ var next_fight_bonus_fame: int = 0
 var next_fight_bonus_gold: int = 0
 var next_fight_risk_modifier_mult: float = 1.0
 var pending_wager_stake: int = 0
+var campaign_length_turns: int = DEFAULT_CAMPAIGN_LENGTH_TURNS
+var campaign_victory_mode: String = STANDARD_CAMPAIGN_VICTORY_MODE
 
 var _content_registry: ContentRegistry
 var _stats_resolver: BuildStatsResolver
@@ -154,6 +158,8 @@ func new_game() -> void:
 	gold = STARTING_GOLD
 	fame = STARTING_FAME
 	day = STARTING_DAY
+	campaign_length_turns = DEFAULT_CAMPAIGN_LENGTH_TURNS
+	campaign_victory_mode = STANDARD_CAMPAIGN_VICTORY_MODE
 	next_gladiator_index = 1
 	next_enemy_index = 1
 	selected_gladiator_id = ""
@@ -174,7 +180,7 @@ func new_game() -> void:
 	recruit_gladiator("RET")
 	recruit_gladiator("SEC")
 	add_recent_event("Nuova campagna avviata (giorno %d)." % day)
-	append_campaign_log("Day %d - New campaign started." % day)
+	append_campaign_log("Turn %d - New campaign started." % day)
 	var saved: bool = save_game()
 	save_completed.emit(saved)
 	roster_updated.emit()
@@ -219,6 +225,9 @@ func save_game() -> bool:
 		"gold": gold,
 		"fame": fame,
 		"day": day,
+		"turn": day,
+		"campaign_length_turns": campaign_length_turns,
+		"campaign_victory_mode": campaign_victory_mode,
 		"next_gladiator_index": next_gladiator_index,
 		"next_enemy_index": next_enemy_index,
 		"game_state": game_state,
@@ -247,11 +256,11 @@ func save_game() -> bool:
 	save_completed.emit(true)
 	return true
 
-func advance_day() -> void:
-	if not can_advance_day():
+func advance_turn() -> void:
+	if not can_advance_turn():
 		return
 	day += 1
-	append_campaign_log("Day %d - Advanced to day %d." % [day - 1, day])
+	append_campaign_log("Turn %d - Advanced to turn %d." % [day - 1, day])
 	current_event = generate_daily_event()
 	current_narrative_event = generate_narrative_event()
 	heal_and_update_injuries()
@@ -265,6 +274,12 @@ func advance_day() -> void:
 	_emit_recent_events_updated()
 	_emit_daily_event_updated()
 	_emit_narrative_event_updated()
+
+func advance_day() -> void:
+	advance_turn()
+
+func can_advance_turn() -> bool:
+	return can_advance_day()
 
 func can_advance_day() -> bool:
 	if game_state != STATE_RUNNING:
@@ -381,7 +396,7 @@ func recruit_gladiator(gladiator_class: String) -> Dictionary:
 	roster.append(gladiator)
 	next_gladiator_index += 1
 	add_recent_event("Reclutato %s." % get_gladiator_display_name(gladiator))
-	append_campaign_log("Day %d - Recruited %s (%s) for %d gold." % [day, get_gladiator_display_name(gladiator), str(gladiator.get("class", "")), recruit_cost])
+	append_campaign_log("Turn %d - Recruited %s (%s) for %d gold." % [day, get_gladiator_display_name(gladiator), str(gladiator.get("class", "")), recruit_cost])
 	save_game()
 	roster_updated.emit()
 	_emit_resources_updated()
@@ -450,7 +465,7 @@ func invalidate_active_tournament(reason: String = "invalid_state") -> void:
 	elif normalized_reason == "inconsistent_state":
 		reason_message = "The tournament was forfeited because tournament data was inconsistent."
 	add_recent_event(reason_message)
-	append_campaign_log("Day %d - Tournament forfeited: %s" % [day, normalized_reason])
+	append_campaign_log("Turn %d - Tournament forfeited: %s" % [day, normalized_reason])
 	save_game()
 	roster_updated.emit()
 	_emit_resources_updated()
@@ -585,7 +600,7 @@ func resolve_narrative_event(choice_id: String) -> void:
 		return
 
 	add_recent_event("%s — %s" % [str(event_data.get("title", "Narrative Event")), result_message])
-	append_campaign_log("Day %d - Narrative event %s resolved: %s" % [day, event_id, result_message])
+	append_campaign_log("Turn %d - Narrative event %s resolved: %s" % [day, event_id, result_message])
 	current_narrative_event = {}
 	save_game()
 	roster_updated.emit()
@@ -803,7 +818,7 @@ func process_tournament_step(result: Dictionary) -> Dictionary:
 	var current_match: int = int(active_tournament.get("current_match", 1))
 	if not player_won:
 		add_recent_event("Tournament ended: your gladiator lost at match %d." % current_match)
-		append_campaign_log("Day %d - Tournament ended with defeat at match %d." % [day, current_match])
+		append_campaign_log("Turn %d - Tournament ended with defeat at match %d." % [day, current_match])
 		active_tournament = {}
 		locked_tournament_gladiator_id = ""
 		return {"tournament_completed": false, "player_won": false}
@@ -814,7 +829,7 @@ func process_tournament_step(result: Dictionary) -> Dictionary:
 		gold += TOURNAMENT_FINAL_GOLD_BONUS
 		fame += TOURNAMENT_FINAL_FAME_BONUS
 		add_recent_event("Tournament complete! Bonus: +%d gold, +%d fame." % [TOURNAMENT_FINAL_GOLD_BONUS, TOURNAMENT_FINAL_FAME_BONUS])
-		append_campaign_log("Day %d - Tournament completed: +%d gold, +%d fame." % [day, TOURNAMENT_FINAL_GOLD_BONUS, TOURNAMENT_FINAL_FAME_BONUS])
+		append_campaign_log("Turn %d - Tournament completed: +%d gold, +%d fame." % [day, TOURNAMENT_FINAL_GOLD_BONUS, TOURNAMENT_FINAL_FAME_BONUS])
 		active_tournament = {}
 		locked_tournament_gladiator_id = ""
 		return {"tournament_completed": true, "player_won": true}
@@ -858,7 +873,7 @@ func resolve_fight(result: Dictionary) -> void:
 			loser["alive"] = false
 			loser["injured_days"] = 0
 			add_recent_event("%s was slain in the arena." % get_gladiator_display_name(loser))
-			append_campaign_log("Day %d - Death: %s was slain in the arena." % [day, get_gladiator_display_name(loser)])
+			append_campaign_log("Turn %d - Death: %s was slain in the arena." % [day, get_gladiator_display_name(loser)])
 		else:
 			injury_applied_days = apply_injury_from_fight(loser_id, result)
 	result["injury_applied_days"] = injury_applied_days
@@ -883,7 +898,7 @@ func resolve_fight(result: Dictionary) -> void:
 		int(result.get("turns", 0)),
 	])
 	_add_player_outcome_event(winner_id, loser_id, loser_dead, reward_summary)
-	append_campaign_log("Day %d - Fight result: %s defeated %s in %d turns (%s)." % [
+	append_campaign_log("Turn %d - Fight result: %s defeated %s in %d turns (%s)." % [
 		day,
 		get_gladiator_display_name(winner) if not winner.is_empty() else winner_id,
 		get_gladiator_display_name(loser) if not loser.is_empty() else loser_id,
@@ -914,14 +929,36 @@ func check_end_conditions() -> void:
 	if not has_living_gladiators():
 		_set_game_state(STATE_DEFEAT)
 		add_recent_event("All your gladiators are dead.")
-		append_campaign_log("Day %d - Campaign defeat: all gladiators are dead." % day)
+		append_campaign_log("Turn %d - Campaign defeat: all gladiators are dead." % day)
 		return
-	var reached_fame_target: bool = fame >= VICTORY_FAME_TARGET
-	var reached_day_target_with_survivor: bool = day >= VICTORY_DAY_TARGET and has_living_gladiators()
-	if reached_fame_target or reached_day_target_with_survivor:
+	var victory_status: Dictionary = _evaluate_campaign_victory_status()
+	if bool(victory_status.get("achieved", false)):
 		_set_game_state(STATE_VICTORY)
 		add_recent_event("Your school has achieved glory!")
-		append_campaign_log("Day %d - Campaign victory achieved." % day)
+		append_campaign_log("Turn %d - Campaign victory achieved: %s" % [day, str(victory_status.get("reason", "unknown reason"))])
+
+func _evaluate_campaign_victory_status() -> Dictionary:
+	var turn_value: int = day
+	var target_turn: int = maxi(1, campaign_length_turns)
+	var mode: String = campaign_victory_mode
+	if mode != STANDARD_CAMPAIGN_VICTORY_MODE and mode != ALTERNATE_VICTORY_MODE_TURN_OR_FAME:
+		mode = STANDARD_CAMPAIGN_VICTORY_MODE
+	var reached_turn_target: bool = turn_value >= target_turn
+	if mode == STANDARD_CAMPAIGN_VICTORY_MODE:
+		append_campaign_log("Campaign victory check: turn %d/%d, %s." % [turn_value, target_turn, "victory achieved" if reached_turn_target else "continue campaign"])
+		append_campaign_log("Campaign victory check: alternate fame victory disabled in standard mode.")
+		if reached_turn_target:
+			return {"achieved": true, "reason": "reached final turn (%d/%d)." % [turn_value, target_turn]}
+		return {"achieved": false}
+	var fame_value: int = fame
+	var reached_fame_target: bool = fame_value >= VICTORY_FAME_TARGET
+	append_campaign_log("Campaign victory check: turn %d/%d, %s." % [turn_value, target_turn, "victory achieved" if reached_turn_target else "continue campaign"])
+	append_campaign_log("Campaign victory check: fame target %d/%d, %s." % [fame_value, VICTORY_FAME_TARGET, "victory achieved" if reached_fame_target else "continue campaign"])
+	if reached_turn_target:
+		return {"achieved": true, "reason": "reached final turn (%d/%d)." % [turn_value, target_turn]}
+	if reached_fame_target:
+		return {"achieved": true, "reason": "reached fame target (%d/%d)." % [fame_value, VICTORY_FAME_TARGET]}
+	return {"achieved": false}
 
 func award_post_fight_rewards(winner_id: String, loser_id: String, result: Dictionary, event_data: Dictionary = {}) -> Dictionary:
 	var player_id: String = str(result.get("player_gladiator_id", _resolve_player_gladiator_id(winner_id, loser_id)))
@@ -1046,7 +1083,7 @@ func process_level_ups(gladiator: Dictionary) -> Array[Dictionary]:
 		_apply_level_growth(gladiator, current_level)
 		var message: String = "%s ha raggiunto il livello %d." % [get_gladiator_display_name(gladiator), current_level]
 		add_recent_event(message)
-		append_campaign_log("Day %d - Level up: %s reached level %d." % [day, get_gladiator_display_name(gladiator), current_level])
+		append_campaign_log("Turn %d - Level up: %s reached level %d." % [day, get_gladiator_display_name(gladiator), current_level])
 		events.append({
 			"type": "LEVEL_UP",
 			"message": message,
@@ -1080,7 +1117,7 @@ func add_recent_event(event_text: String) -> void:
 	var normalized: String = event_text.strip_edges()
 	if normalized == "":
 		return
-	recent_events.append("Day %d - %s" % [day, normalized])
+	recent_events.append("Turn %d - %s" % [day, normalized])
 	while recent_events.size() > RECENT_EVENTS_MAX:
 		recent_events.remove_at(0)
 
@@ -1408,7 +1445,9 @@ func _find_gladiator_by_id(gladiator_id: String) -> Dictionary:
 func _apply_loaded_data(data: Dictionary) -> void:
 	gold = int(data.get("gold", STARTING_GOLD))
 	fame = int(data.get("fame", STARTING_FAME))
-	day = int(data.get("day", STARTING_DAY))
+	day = int(data.get("turn", data.get("day", STARTING_DAY)))
+	campaign_length_turns = maxi(1, int(data.get("campaign_length_turns", DEFAULT_CAMPAIGN_LENGTH_TURNS)))
+	campaign_victory_mode = str(data.get("campaign_victory_mode", STANDARD_CAMPAIGN_VICTORY_MODE))
 	next_gladiator_index = int(data.get("next_gladiator_index", 1))
 	next_enemy_index = int(data.get("next_enemy_index", 1))
 	selected_gladiator_id = str(data.get("selected_gladiator_id", ""))

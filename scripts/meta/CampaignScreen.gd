@@ -19,7 +19,7 @@ const COMBAT_ADAPTER_SCRIPT: GDScript = preload("res://scripts/combat/bridge/Cam
 @onready var _new_game_button: Button = %NewGameButton
 @onready var _recruit_ret_button: Button = %RecruitRetButton
 @onready var _recruit_sec_button: Button = %RecruitSecButton
-@onready var _advance_day_button: Button = %AdvanceDayButton
+@onready var _advance_turn_button: Button = %AdvanceDayButton
 @onready var _save_button: Button = %SaveButton
 @onready var _load_button: Button = %LoadButton
 @onready var _last_fight_result: RichTextLabel = %LastFightResult
@@ -80,10 +80,10 @@ func _on_recruit_sec_pressed() -> void:
 		return
 
 func _on_advance_day_pressed() -> void:
-	if not GameManager.can_advance_day():
+	if not GameManager.can_advance_turn():
 		return
-	GameManager.advance_day()
-	GameManager.add_recent_event("Giorno avanzato.")
+	GameManager.advance_turn()
+	GameManager.add_recent_event("Turno avanzato.")
 	_refresh_recent_events()
 
 func _on_start_fight_pressed() -> void:
@@ -283,12 +283,12 @@ func _refresh_campaign_actions_state() -> void:
 	var narrative_blocked: bool = GameManager.has_active_narrative_event()
 	var controls_enabled: bool = _campaign_controls_enabled and campaign_running and not narrative_blocked
 	var can_fight_now: bool = controls_enabled and GameManager.can_start_fight()
-	var can_advance_day_now: bool = _campaign_controls_enabled and GameManager.can_advance_day()
+	var can_advance_turn_now: bool = _campaign_controls_enabled and GameManager.can_advance_turn()
 	_new_game_button.disabled = not _campaign_controls_enabled
 	_recruit_ret_button.disabled = not controls_enabled
 	_recruit_sec_button.disabled = not controls_enabled
-	_advance_day_button.disabled = not can_advance_day_now
-	_advance_day_button.tooltip_text = _build_advance_day_block_reason() if not can_advance_day_now else "Passa al giorno successivo."
+	_advance_turn_button.disabled = not can_advance_turn_now
+	_advance_turn_button.tooltip_text = _build_advance_turn_block_reason() if not can_advance_turn_now else "Advance to next turn."
 	_start_fight_button.disabled = not can_fight_now
 	_save_button.disabled = not controls_enabled
 	_load_button.disabled = not controls_enabled
@@ -363,7 +363,7 @@ func _resolve_narrative_choice_at(index: int) -> void:
 func _can_use_campaign_actions() -> bool:
 	return GameManager.is_campaign_running() and not GameManager.has_active_narrative_event()
 
-func _build_advance_day_block_reason() -> String:
+func _build_advance_turn_block_reason() -> String:
 	if not _campaign_controls_enabled:
 		return "Attendi la fine del fight in corso."
 	if not GameManager.is_campaign_running():
@@ -374,7 +374,7 @@ func _build_advance_day_block_reason() -> String:
 		if GameManager.can_continue_active_tournament():
 			return "Concludi prima il torneo attivo."
 		return "Il torneo non e' continuabile e verra' chiuso automaticamente."
-	return "Advance Day non disponibile in questo momento."
+	return "Advance Turn is not available right now."
 
 func _refresh_today_event() -> void:
 	var event_data: Dictionary = GameManager.get_current_event()
@@ -386,7 +386,7 @@ func _refresh_today_event() -> void:
 	var risk_text: String = "Standard risk of death"
 	var type_label: String = event_type
 	if GameManager.has_active_tournament():
-		type_label = "Tournament Day"
+		type_label = "Tournament Turn"
 		event_description = "Tournament in progress. 2 matches required."
 		risk_text = "Escalating risk (final match is deadlier)"
 	if event_type == GameManager.EVENT_TYPE_HARD_FIGHT:
@@ -394,7 +394,7 @@ func _refresh_today_event() -> void:
 	elif event_type == GameManager.EVENT_TYPE_REST:
 		risk_text = "No arena death risk today"
 	elif event_type == GameManager.EVENT_TYPE_TOURNAMENT:
-		type_label = "Tournament Day"
+		type_label = "Tournament Turn"
 		event_description = "%s 2 matches required." % event_description
 		risk_text = "High sustained risk across two matches"
 	elif event_type == GameManager.EVENT_TYPE_BEAST_FIGHT:
@@ -435,11 +435,11 @@ func _refresh_campaign_end_overlay() -> void:
 		return
 	if state == GameManager.STATE_VICTORY:
 		_end_game_title.text = "You have become a legendary Lanista"
-		_end_game_stats.text = "Days: %d\nFame: %d\nSurviving gladiators: %d" % [
+		_end_game_stats.text = "Turns: %d\nFame: %d\nSurviving gladiators: %d" % [
 			GameManager.day,
 			GameManager.fame,
 			GameManager.get_surviving_gladiators_count(),
 		]
 		return
 	_end_game_title.text = "Your school has fallen"
-	_end_game_stats.text = "Days: %d\nFame: %d" % [GameManager.day, GameManager.fame]
+	_end_game_stats.text = "Turns: %d\nFame: %d" % [GameManager.day, GameManager.fame]
