@@ -56,6 +56,10 @@ var _last_batch_result: Dictionary = {}
 var _is_fight_flow_active: bool = false
 var _campaign_controls_enabled: bool = true
 var _narrative_choice_ids: Array[String] = []
+var _is_refreshing_roster: bool = false
+var _pending_roster_refresh: bool = false
+var _suppress_selection_callbacks: bool = false
+var _pending_roster_refresh_source: String = ""
 
 func _ready() -> void:
 	_combat_adapter = COMBAT_ADAPTER_SCRIPT.new()
@@ -115,19 +119,25 @@ func _on_start_fight_pressed() -> void:
 		_refresh_recent_events()
 
 func _on_roster_list_item_selected(index: int) -> void:
+	if _suppress_selection_callbacks:
+		print("[SELECTION] callback_ignored source=programmatic_refresh index=%d suppressed=true" % index)
+		return
+	if _is_refreshing_roster:
+		print("[SELECTION] callback_ignored source=refresh_in_progress index=%d suppressed=false" % index)
+		return
 	if not _campaign_controls_enabled:
 		return
 	var gladiator_id: String = _gladiator_id_for_row(index)
 	if gladiator_id == "":
 		GameManager.add_recent_event("Selection invalid: stale roster row.")
 		_refresh_recent_events()
-		_render_roster()
+		_request_roster_refresh("user_selection_stale_row")
 		return
 	var locked_tournament_gladiator_id: String = GameManager.get_locked_tournament_gladiator_id()
 	if locked_tournament_gladiator_id != "" and gladiator_id != locked_tournament_gladiator_id:
 		GameManager.add_recent_event("Tournament lock active: continue with the locked gladiator.")
 		_refresh_recent_events()
-		_refresh_selected_fighter()
+		_request_roster_refresh("user_selection_rejected_tournament_lock")
 		return
 	var eligibility: Dictionary = GameManager.get_gladiator_action_eligibility(
 		gladiator_id,
@@ -138,13 +148,14 @@ func _on_roster_list_item_selected(index: int) -> void:
 		var rejected_name: String = str(eligibility.get("gladiator_name", gladiator_id))
 		GameManager.add_recent_event("%s %s." % [rejected_name, str(eligibility.get("reason", "is not eligible"))])
 		_refresh_recent_events()
-		_refresh_selected_fighter()
+		_request_roster_refresh("user_selection_rejected_ineligible")
 		return
 	if not GameManager.set_selected_gladiator(gladiator_id):
 		GameManager.add_recent_event("Selezione non valida: %s." % gladiator_id)
 		_refresh_recent_events()
-		_render_roster()
+		_request_roster_refresh("user_selection_set_failed")
 		return
+	print("[SELECTION] user_selected id=%s index=%d source=user_input" % [gladiator_id, index])
 	_refresh_selected_fighter()
 
 func _on_save_pressed() -> void:
@@ -284,10 +295,7 @@ func _parse_positive_int(value: String, fallback: int, minimum: int) -> int:
 	return parsed
 
 func _on_roster_updated() -> void:
-	_render_roster()
-	_refresh_selected_fighter()
-	if not _is_fight_flow_active:
-		_refresh_start_fight_button_state()
+	_request_roster_refresh("signal:roster_updated")
 
 func _on_state_changed(new_state: String) -> void:
 	_state_value.text = new_state
@@ -371,8 +379,7 @@ func _build_outcome_label(player_outcome: String) -> String:
 func _refresh_all() -> void:
 	_on_resources_updated(GameManager.gold, GameManager.fame, GameManager.day)
 	_on_state_changed(GameManager.game_state)
-	_render_roster()
-	_refresh_selected_fighter()
+	_request_roster_refresh("refresh_all")
 	_refresh_recent_events()
 	_refresh_campaign_end_overlay()
 	_refresh_today_event()
@@ -381,9 +388,37 @@ func _refresh_all() -> void:
 	if not _is_fight_flow_active:
 		_refresh_start_fight_button_state()
 
-func _render_roster() -> void:
+func _request_roster_refresh(source: String) -> void:
+	var normalized_source: String = source.strip_edges()
+	if normalized_source == "":
+		normalized_source = "unspecified"
+	if _is_refreshing_roster:
+		_pending_roster_refresh = true
+		_pending_roster_refresh_source = normalized_source
+		print("[ROSTER_REFRESH] skipped source=%s reason=refresh_in_progress pending=true" % normalized_source)
+		return
+	_pending_roster_refresh = true
+	_pending_roster_refresh_source = normalized_source
+	var pass_index: int = 0
+	while _pending_roster_refresh:
+		pass_index += 1
+		_pending_roster_refresh = false
+		var active_source: String = _pending_roster_refresh_source
+		print("[ROSTER_REFRESH] enter source=%s pass=%d" % [active_source, pass_index])
+		_is_refreshing_roster = true
+		_render_roster(active_source)
+		_refresh_selected_fighter(active_source)
+		if not _is_fight_flow_active:
+			_refresh_start_fight_button_state()
+		_is_refreshing_roster = false
+		print("[ROSTER_REFRESH] exit source=%s pass=%d pending=%s" % [active_source, pass_index, str(_pending_roster_refresh)])
+
+func _render_roster(source: String = "unspecified") -> void:
+	_suppress_selection_callbacks = true
+	print("[ROSTER_REFRESH] redraw_begin source=%s suppress_selection_callbacks=true" % source)
 	_roster_list.clear()
 	var roster: Array[Dictionary] = GameManager.get_roster()
+	var locked_tournament_gladiator_id: String = GameManager.get_locked_tournament_gladiator_id()
 	for row_index in range(roster.size()):
 		var gladiator: Dictionary = roster[row_index]
 		var gladiator_id: String = str(gladiator.get("id", "")).strip_edges()
@@ -396,7 +431,9 @@ func _render_roster() -> void:
 		if status == GameManager.STATUS_INJURED:
 			injury_label = " (%s)" % GameManager.format_injury_recovering_label(int(gladiator.get("injured_days", 0)))
 		var acted_label: String = ""
-		var eligibility: Dictionary = GameManager.get_gladiator_action_eligibility(gladiator_id, GameManager.ACTION_CONTEXT_NORMAL_FIGHT, GameManager.has_active_tournament())
+		var is_locked_tournament_fighter: bool = locked_tournament_gladiator_id != "" and gladiator_id == locked_tournament_gladiator_id
+		var action_context: String = GameManager.ACTION_CONTEXT_TOURNAMENT_CONTINUATION if is_locked_tournament_fighter else GameManager.ACTION_CONTEXT_NORMAL_FIGHT
+		var eligibility: Dictionary = GameManager.get_gladiator_action_eligibility(gladiator_id, action_context, is_locked_tournament_fighter)
 		if bool(eligibility.get("has_acted_this_phase", false)):
 			acted_label = " [ACTED THIS PHASE]"
 		var row: String = "%s | %s | Lv %d XP %s | HP:%d ATK:%d DEF:%d | %s%s | W:%d L:%d" % [
@@ -414,21 +451,32 @@ func _render_roster() -> void:
 		]
 		_roster_list.add_item(row)
 		_roster_list.set_item_metadata(row_index, gladiator_id)
+		_roster_list.set_item_disabled(row_index, not bool(eligibility.get("eligible", false)))
 	var selected_id: String = GameManager.get_selected_gladiator_id()
 	if selected_id == "":
 		for index in range(_roster_list.item_count):
 			_roster_list.deselect(index)
+		_suppress_selection_callbacks = false
+		print("[ROSTER_REFRESH] redraw_end source=%s suppress_selection_callbacks=false restored_selection=none" % source)
 		return
 	var selected_index: int = -1
 	for index in range(_roster_list.item_count):
 		if str(_roster_list.get_item_metadata(index)) == selected_id:
 			selected_index = index
 			break
-	if selected_index >= 0:
+	if selected_index >= 0 and not _roster_list.is_item_disabled(selected_index):
 		_roster_list.select(selected_index)
+		print("[SELECTION] programmatic_restore source=%s id=%s index=%d suppressed=%s" % [
+			source,
+			selected_id,
+			selected_index,
+			str(_suppress_selection_callbacks),
+		])
 	else:
 		for index in range(_roster_list.item_count):
 			_roster_list.deselect(index)
+	_suppress_selection_callbacks = false
+	print("[ROSTER_REFRESH] redraw_end source=%s suppress_selection_callbacks=false restored_selection=%s" % [source, selected_id if selected_index >= 0 else "none"])
 
 func _gladiator_id_for_row(index: int) -> String:
 	if index < 0 or index >= _roster_list.item_count:
@@ -577,16 +625,18 @@ func _refresh_today_event() -> void:
 	_today_event_reward_value.text = "%+d%% rewards" % reward_bonus_percent
 	_today_event_risk_value.text = risk_text
 
-func _refresh_selected_fighter() -> void:
+func _refresh_selected_fighter(source: String = "unspecified") -> void:
 	var locked_tournament_gladiator_id: String = GameManager.get_locked_tournament_gladiator_id()
 	if locked_tournament_gladiator_id != "":
-		GameManager.set_selected_gladiator(locked_tournament_gladiator_id)
+		if GameManager.set_selected_gladiator(locked_tournament_gladiator_id):
+			print("[SELECTION] lock_enforced source=%s id=%s" % [source, locked_tournament_gladiator_id])
 	var selected: Dictionary = GameManager.get_selected_gladiator()
 	if selected.is_empty():
 		var available: Array[Dictionary] = GameManager.get_available_gladiators()
 		if not available.is_empty():
 			var fallback_id: String = str(available[0].get("id", ""))
-			GameManager.set_selected_gladiator(fallback_id)
+			if GameManager.set_selected_gladiator(fallback_id):
+				print("[SELECTION] fallback_selected source=%s id=%s" % [source, fallback_id])
 			selected = GameManager.get_selected_gladiator()
 	if selected.is_empty():
 		_selected_fighter_value.text = "None"
