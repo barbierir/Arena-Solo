@@ -165,6 +165,7 @@ var _is_revalidating_selection: bool = false
 var _is_emitting_roster_state_changed: bool = false
 var _pending_roster_state_changed_emit: bool = false
 var _pending_roster_state_changed_source: String = ""
+var _narrative_event_resolving: bool = false
 
 func get_current_phase() -> int:
 	return day
@@ -731,16 +732,21 @@ func can_resolve_narrative_choice(choice_id: String) -> bool:
 	return _choice_exists(current_narrative_event, normalized_choice)
 
 func resolve_narrative_event(choice_id: String) -> void:
+	if _narrative_event_resolving:
+		print("[Narrative] Ignored duplicate resolve request choice=%s" % choice_id.strip_edges())
+		return
 	if not has_active_narrative_event():
 		add_recent_event("No active narrative event to resolve.")
 		_emit_recent_events_updated()
 		return
+	_narrative_event_resolving = true
 	var event_data: Dictionary = _sanitize_narrative_event(current_narrative_event)
 	var event_id: String = str(event_data.get("id", ""))
 	var normalized_choice: String = choice_id.strip_edges()
 	if not _choice_exists(event_data, normalized_choice):
 		add_recent_event("Invalid narrative choice for %s." % event_id)
 		_emit_recent_events_updated()
+		_narrative_event_resolving = false
 		return
 
 	var result_message: String = ""
@@ -774,6 +780,7 @@ func resolve_narrative_event(choice_id: String) -> void:
 		_emit_resources_updated()
 		_emit_recent_events_updated()
 		_emit_narrative_event_updated()
+		_narrative_event_resolving = false
 		return
 
 	add_recent_event("%s — %s" % [str(event_data.get("title", "Narrative Event")), result_message])
@@ -784,6 +791,7 @@ func resolve_narrative_event(choice_id: String) -> void:
 	_emit_resources_updated()
 	_emit_recent_events_updated()
 	_emit_narrative_event_updated()
+	_narrative_event_resolving = false
 
 func generate_daily_event() -> Dictionary:
 	var rng: RandomNumberGenerator = RandomNumberGenerator.new()

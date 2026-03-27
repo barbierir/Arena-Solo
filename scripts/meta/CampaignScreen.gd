@@ -56,6 +56,7 @@ var _last_batch_result: Dictionary = {}
 var _is_fight_flow_active: bool = false
 var _campaign_controls_enabled: bool = true
 var _narrative_choice_ids: Array[String] = []
+var _narrative_event_resolving: bool = false
 var _is_refreshing_roster: bool = false
 var _pending_roster_refresh: bool = false
 var _suppress_selection_callbacks: bool = false
@@ -536,9 +537,14 @@ func _refresh_narrative_overlay() -> void:
 	var event_data: Dictionary = GameManager.get_current_narrative_event()
 	_narrative_choice_ids.clear()
 	if event_data.is_empty():
-		_narrative_overlay.visible = false
+		if _narrative_overlay.visible:
+			print("[NarrativeUI] Closing narrative popup")
+		_finish_narrative_event_ui()
 		return
+	if not _narrative_overlay.visible:
+		print("[NarrativeUI] Narrative popup opened id=%s" % str(event_data.get("id", "")))
 	_narrative_overlay.visible = true
+	_narrative_event_resolving = false
 	_narrative_title.text = str(event_data.get("title", "Narrative Event"))
 	_narrative_description.text = str(event_data.get("description", ""))
 	_narrative_hint.text = "Resolve this event to continue the campaign."
@@ -566,16 +572,51 @@ func _configure_narrative_choice_button(button: Button, choice_data: Dictionary)
 	_narrative_choice_ids.append(choice_id)
 
 func _on_narrative_choice_a_pressed() -> void:
-	_resolve_narrative_choice_at(0)
+	_resolve_narrative_choice_at(0, "A")
 
 func _on_narrative_choice_b_pressed() -> void:
-	_resolve_narrative_choice_at(1)
+	_resolve_narrative_choice_at(1, "B")
 
-func _resolve_narrative_choice_at(index: int) -> void:
+func _resolve_narrative_choice_at(index: int, button_label: String) -> void:
+	if _narrative_event_resolving:
+		print("[NarrativeUI] Ignored duplicate narrative click button=%s" % button_label)
+		return
 	if index < 0 or index >= _narrative_choice_ids.size():
 		return
 	var choice_id: String = _narrative_choice_ids[index]
-	GameManager.resolve_narrative_event(choice_id)
+	_resolve_narrative_event(choice_id)
+
+func _resolve_narrative_event(choice_id: String) -> void:
+	var normalized_choice: String = choice_id.strip_edges()
+	if normalized_choice == "":
+		return
+	var event_data: Dictionary = GameManager.get_current_narrative_event()
+	if event_data.is_empty():
+		print("[NarrativeUI] Ignored narrative choice with no active event choice=%s" % normalized_choice)
+		return
+	_narrative_event_resolving = true
+	print("[NarrativeUI] Narrative choice clicked id=%s event=%s" % [normalized_choice, str(event_data.get("id", ""))])
+	_set_narrative_buttons_disabled(true)
+	print("[Narrative] Resolving %s with choice=%s" % [str(event_data.get("id", "")), normalized_choice])
+	GameManager.resolve_narrative_event(normalized_choice)
+	if not GameManager.has_active_narrative_event():
+		print("[NarrativeUI] Closing narrative popup after resolve")
+		_finish_narrative_event_ui()
+		return
+	_narrative_event_resolving = false
+	_set_narrative_buttons_disabled(false)
+	print("[NarrativeUI] Narrative event still active after resolve event=%s" % str(event_data.get("id", "")))
+
+func _set_narrative_buttons_disabled(disabled: bool) -> void:
+	if _narrative_choice_a_button.visible:
+		_narrative_choice_a_button.disabled = disabled
+	if _narrative_choice_b_button.visible:
+		_narrative_choice_b_button.disabled = disabled
+
+func _finish_narrative_event_ui() -> void:
+	_narrative_overlay.visible = false
+	_narrative_choice_ids.clear()
+	_narrative_event_resolving = false
 
 func _can_use_campaign_actions() -> bool:
 	return GameManager.is_campaign_running() and not GameManager.has_active_narrative_event()
