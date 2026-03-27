@@ -55,7 +55,6 @@ var _batch_simulator: CombatBatchSimulator
 var _last_batch_result: Dictionary = {}
 var _is_fight_flow_active: bool = false
 var _campaign_controls_enabled: bool = true
-var _roster_ids_by_index: Array[String] = []
 var _narrative_choice_ids: Array[String] = []
 
 func _ready() -> void:
@@ -118,28 +117,33 @@ func _on_start_fight_pressed() -> void:
 func _on_roster_list_item_selected(index: int) -> void:
 	if not _campaign_controls_enabled:
 		return
-	if index < 0 or index >= _roster_ids_by_index.size():
+	var gladiator_id: String = _gladiator_id_for_row(index)
+	if gladiator_id == "":
+		GameManager.add_recent_event("Selection invalid: stale roster row.")
+		_refresh_recent_events()
+		_render_roster()
 		return
-	var gladiator_id: String = _roster_ids_by_index[index]
 	var locked_tournament_gladiator_id: String = GameManager.get_locked_tournament_gladiator_id()
 	if locked_tournament_gladiator_id != "" and gladiator_id != locked_tournament_gladiator_id:
 		GameManager.add_recent_event("Tournament lock active: continue with the locked gladiator.")
 		_refresh_recent_events()
 		_refresh_selected_fighter()
 		return
-	if locked_tournament_gladiator_id == "" and GameManager.has_gladiator_acted_this_phase(gladiator_id):
-		var acted_name: String = gladiator_id
-		for roster_entry: Dictionary in GameManager.get_roster():
-			if str(roster_entry.get("id", "")) == gladiator_id:
-				acted_name = GameManager.get_gladiator_display_name(roster_entry)
-				break
-		GameManager.add_recent_event("%s already acted this phase." % acted_name)
+	var eligibility: Dictionary = GameManager.get_gladiator_action_eligibility(
+		gladiator_id,
+		GameManager.ACTION_CONTEXT_NORMAL_FIGHT,
+		locked_tournament_gladiator_id != ""
+	)
+	if not bool(eligibility.get("eligible", false)):
+		var rejected_name: String = str(eligibility.get("gladiator_name", gladiator_id))
+		GameManager.add_recent_event("%s %s." % [rejected_name, str(eligibility.get("reason", "is not eligible"))])
 		_refresh_recent_events()
 		_refresh_selected_fighter()
 		return
 	if not GameManager.set_selected_gladiator(gladiator_id):
 		GameManager.add_recent_event("Selezione non valida: %s." % gladiator_id)
 		_refresh_recent_events()
+		_render_roster()
 		return
 	_refresh_selected_fighter()
 
@@ -379,9 +383,10 @@ func _refresh_all() -> void:
 
 func _render_roster() -> void:
 	_roster_list.clear()
-	_roster_ids_by_index.clear()
 	var roster: Array[Dictionary] = GameManager.get_roster()
-	for gladiator: Dictionary in roster:
+	for row_index in range(roster.size()):
+		var gladiator: Dictionary = roster[row_index]
+		var gladiator_id: String = str(gladiator.get("id", "")).strip_edges()
 		var status: String = GameManager.get_gladiator_status(gladiator)
 		var level: int = int(gladiator.get("level", gladiator.get("livello", 1)))
 		var experience: int = int(gladiator.get("experience", gladiator.get("esperienza", 0)))
@@ -391,7 +396,8 @@ func _render_roster() -> void:
 		if status == GameManager.STATUS_INJURED:
 			injury_label = " (%s)" % GameManager.format_injury_recovering_label(int(gladiator.get("injured_days", 0)))
 		var acted_label: String = ""
-		if GameManager.has_gladiator_acted_this_phase(str(gladiator.get("id", ""))) and not GameManager.has_active_tournament():
+		var eligibility: Dictionary = GameManager.get_gladiator_action_eligibility(gladiator_id, GameManager.ACTION_CONTEXT_NORMAL_FIGHT, GameManager.has_active_tournament())
+		if bool(eligibility.get("has_acted_this_phase", false)):
 			acted_label = " [ACTED THIS PHASE]"
 		var row: String = "%s | %s | Lv %d XP %s | HP:%d ATK:%d DEF:%d | %s%s | W:%d L:%d" % [
 			GameManager.get_gladiator_display_name(gladiator),
@@ -407,13 +413,27 @@ func _render_roster() -> void:
 			int(gladiator.get("losses", 0)),
 		]
 		_roster_list.add_item(row)
-		_roster_ids_by_index.append(str(gladiator.get("id", "")))
+		_roster_list.set_item_metadata(row_index, gladiator_id)
 	var selected_id: String = GameManager.get_selected_gladiator_id()
 	if selected_id == "":
+		for index in range(_roster_list.item_count):
+			_roster_list.deselect(index)
 		return
-	var selected_index: int = _roster_ids_by_index.find(selected_id)
+	var selected_index: int = -1
+	for index in range(_roster_list.item_count):
+		if str(_roster_list.get_item_metadata(index)) == selected_id:
+			selected_index = index
+			break
 	if selected_index >= 0:
 		_roster_list.select(selected_index)
+	else:
+		for index in range(_roster_list.item_count):
+			_roster_list.deselect(index)
+
+func _gladiator_id_for_row(index: int) -> String:
+	if index < 0 or index >= _roster_list.item_count:
+		return ""
+	return str(_roster_list.get_item_metadata(index)).strip_edges()
 
 func _refresh_recent_events() -> void:
 	_event_log.clear()
