@@ -321,6 +321,7 @@ func advance_turn() -> void:
 	if _is_rest_event(current_event):
 		apply_rest_day_recovery_bonus()
 	apply_daily_upkeep()
+	current_narrative_event = _validate_active_narrative_event(current_narrative_event)
 	if _event_type(current_event) == EVENT_TYPE_FIGHT and current_narrative_event.is_empty():
 		append_campaign_log("%s - No special arena event this phase. Recovery and upkeep applied." % format_phase_label())
 	check_end_conditions()
@@ -651,7 +652,7 @@ func get_current_narrative_event() -> Dictionary:
 	return _sanitize_narrative_event(current_narrative_event)
 
 func can_offer_doctor_visit() -> bool:
-	return not get_injured_gladiators().is_empty() and gold >= DOCTOR_VISIT_COST_GOLD
+	return _is_doctor_visit_eligible(false)
 
 func can_offer_crowd_favor() -> bool:
 	return gold >= CROWD_FAVOR_COST_GOLD
@@ -674,14 +675,15 @@ func can_offer_wager() -> bool:
 func generate_narrative_event() -> Dictionary:
 	var rng: RandomNumberGenerator = RandomNumberGenerator.new()
 	rng.seed = int(hash("narrative-event-%d-%d-%d" % [day, next_gladiator_index, roster.size()]))
+	var doctor_visit_eligible: bool = _is_doctor_visit_eligible(true)
 	if pending_doctor_offer:
-		if can_offer_doctor_visit():
+		if doctor_visit_eligible:
 			pending_doctor_offer = false
 			return _build_doctor_visit_event()
 	if rng.randf() >= NARRATIVE_EVENT_CHANCE:
 		return {}
 	var eligible_ids: Array[String] = []
-	if can_offer_doctor_visit():
+	if doctor_visit_eligible:
 		eligible_ids.append(NARRATIVE_EVENT_DOCTOR_VISIT)
 	if can_offer_crowd_favor():
 		eligible_ids.append(NARRATIVE_EVENT_CROWD_FAVOR)
@@ -2007,6 +2009,31 @@ func _build_doctor_visit_event() -> Dictionary:
 		],
 	}
 
+func _is_doctor_visit_eligible(log_diagnostics: bool) -> bool:
+	var injured_gladiators_count: int = 0
+	for gladiator: Dictionary in roster:
+		if not bool(gladiator.get("alive", true)):
+			continue
+		if int(gladiator.get("injured_days", 0)) > 0:
+			injured_gladiators_count += 1
+	if injured_gladiators_count <= 0:
+		if log_diagnostics:
+			_debug_narrative("Doctor visit ineligible: no injured gladiators")
+		return false
+	if gold < DOCTOR_VISIT_COST_GOLD:
+		if log_diagnostics:
+			_debug_narrative("Doctor visit ineligible: insufficient gold (%d/%d)" % [gold, DOCTOR_VISIT_COST_GOLD])
+		return false
+	if log_diagnostics:
+		_debug_narrative("Doctor visit eligible: injured_gladiators=%d, gold=%d, cost=%d" % [injured_gladiators_count, gold, DOCTOR_VISIT_COST_GOLD])
+	return true
+
+func _validate_active_narrative_event(event_data: Dictionary) -> Dictionary:
+	var event_id: String = str(event_data.get("id", "")).strip_edges()
+	if event_id == NARRATIVE_EVENT_DOCTOR_VISIT and not _is_doctor_visit_eligible(true):
+		return {}
+	return event_data
+
 func _build_crowd_favor_event() -> Dictionary:
 	return {
 		"id": NARRATIVE_EVENT_CROWD_FAVOR,
@@ -2097,6 +2124,8 @@ func _sanitize_narrative_event(raw_event: Variant) -> Dictionary:
 		return {}
 	var source: Dictionary = raw_event as Dictionary
 	var event_id: String = str(source.get("id", "")).strip_edges()
+	if event_id == NARRATIVE_EVENT_DOCTOR_VISIT and not _is_doctor_visit_eligible(true):
+		return {}
 	var fallback: Dictionary = {}
 	if event_id == NARRATIVE_EVENT_DOCTOR_VISIT:
 		fallback = _build_doctor_visit_event()
@@ -2127,6 +2156,9 @@ func _sanitize_narrative_event(raw_event: Variant) -> Dictionary:
 		var choice_id: String = str(choice.get("id", "")).strip_edges()
 		var choice_text: String = str(choice.get("text", "")).strip_edges()
 		if choice_id == "" or choice_text == "":
+			continue
+		if event_id == NARRATIVE_EVENT_DOCTOR_VISIT and choice_id == "PAY" and gold < DOCTOR_VISIT_COST_GOLD:
+			_debug_narrative("Doctor visit ineligible: insufficient gold (%d/%d)" % [gold, DOCTOR_VISIT_COST_GOLD])
 			continue
 		choices.append({"id": choice_id, "text": choice_text})
 	if choices.is_empty():
