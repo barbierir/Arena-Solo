@@ -5,6 +5,7 @@ const COMBAT_ADAPTER_SCRIPT: GDScript = preload("res://scripts/combat/bridge/Cam
 const CONTENT_LOADER_SCRIPT: GDScript = preload("res://scripts/data/loaders/ContentLoader.gd")
 const COMBAT_BATCH_SIMULATOR_SCRIPT: GDScript = preload("res://scripts/combat/analysis/CombatBatchSimulator.gd")
 const BATCH_REPORTS_DIR: String = "user://batch_reports"
+const DEBUG_NARRATIVE_UI_LOGS: bool = false
 
 @onready var _gold_value: Label = %GoldValue
 @onready var _fame_value: Label = %FameValue
@@ -538,11 +539,11 @@ func _refresh_narrative_overlay() -> void:
 	_narrative_choice_ids.clear()
 	if event_data.is_empty():
 		if _narrative_overlay.visible:
-			print("[NarrativeUI] Closing narrative popup")
+			_debug_narrative_ui("Closing narrative popup")
 		_finish_narrative_event_ui()
 		return
 	if not _narrative_overlay.visible:
-		print("[NarrativeUI] Narrative popup opened id=%s" % str(event_data.get("id", "")))
+		_debug_narrative_ui("Narrative popup opened id=%s" % str(event_data.get("id", "")))
 	_narrative_overlay.visible = true
 	_narrative_event_resolving = false
 	_narrative_title.text = str(event_data.get("title", "Narrative Event"))
@@ -579,9 +580,10 @@ func _on_narrative_choice_b_pressed() -> void:
 
 func _resolve_narrative_choice_at(index: int, button_label: String) -> void:
 	if _narrative_event_resolving:
-		print("[NarrativeUI] Ignored duplicate narrative click button=%s" % button_label)
+		_debug_narrative_ui("Ignored duplicate narrative click button=%s" % button_label)
 		return
 	if index < 0 or index >= _narrative_choice_ids.size():
+		_debug_narrative_ui("Ignored invalid narrative choice index=%d size=%d" % [index, _narrative_choice_ids.size()])
 		return
 	var choice_id: String = _narrative_choice_ids[index]
 	_resolve_narrative_event(choice_id)
@@ -592,20 +594,21 @@ func _resolve_narrative_event(choice_id: String) -> void:
 		return
 	var event_data: Dictionary = GameManager.get_current_narrative_event()
 	if event_data.is_empty():
-		print("[NarrativeUI] Ignored narrative choice with no active event choice=%s" % normalized_choice)
+		_debug_narrative_ui("Ignored narrative choice with no active event choice=%s" % normalized_choice)
 		return
+	# Re-entry guard: prevents double-resolve from rapid repeated clicks.
 	_narrative_event_resolving = true
-	print("[NarrativeUI] Narrative choice clicked id=%s event=%s" % [normalized_choice, str(event_data.get("id", ""))])
+	_debug_narrative_ui("Narrative choice clicked id=%s event=%s" % [normalized_choice, str(event_data.get("id", ""))])
 	_set_narrative_buttons_disabled(true)
-	print("[Narrative] Resolving %s with choice=%s" % [str(event_data.get("id", "")), normalized_choice])
+	_debug_narrative_ui("[Narrative] Resolving %s with choice=%s" % [str(event_data.get("id", "")), normalized_choice])
 	GameManager.resolve_narrative_event(normalized_choice)
 	if not GameManager.has_active_narrative_event():
-		print("[NarrativeUI] Closing narrative popup after resolve")
+		_debug_narrative_ui("Closing narrative popup after resolve")
 		_finish_narrative_event_ui()
 		return
 	_narrative_event_resolving = false
 	_set_narrative_buttons_disabled(false)
-	print("[NarrativeUI] Narrative event still active after resolve event=%s" % str(event_data.get("id", "")))
+	_debug_narrative_ui("Narrative event still active after resolve event=%s" % str(event_data.get("id", "")))
 
 func _set_narrative_buttons_disabled(disabled: bool) -> void:
 	if _narrative_choice_a_button.visible:
@@ -616,7 +619,13 @@ func _set_narrative_buttons_disabled(disabled: bool) -> void:
 func _finish_narrative_event_ui() -> void:
 	_narrative_overlay.visible = false
 	_narrative_choice_ids.clear()
+	_set_narrative_buttons_disabled(true)
 	_narrative_event_resolving = false
+
+func _debug_narrative_ui(message: String) -> void:
+	if not DEBUG_NARRATIVE_UI_LOGS:
+		return
+	print("[NarrativeUI] %s" % message)
 
 func _can_use_campaign_actions() -> bool:
 	return GameManager.is_campaign_running() and not GameManager.has_active_narrative_event()

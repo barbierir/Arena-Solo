@@ -129,6 +129,7 @@ const SEC_BUILD_ID: String = "SEC_STARTER"
 
 const CONTENT_LOADER_SCRIPT: GDScript = preload("res://scripts/data/loaders/ContentLoader.gd")
 const BUILD_STATS_RESOLVER_SCRIPT: GDScript = preload("res://scripts/combat/systems/BuildStatsResolver.gd")
+const DEBUG_NARRATIVE_LOGS: bool = false
 
 var gold: int = STARTING_GOLD
 var fame: int = STARTING_FAME
@@ -732,8 +733,9 @@ func can_resolve_narrative_choice(choice_id: String) -> bool:
 	return _choice_exists(current_narrative_event, normalized_choice)
 
 func resolve_narrative_event(choice_id: String) -> void:
+	# Core anti-reentry guard: protects campaign state from duplicate resolve requests.
 	if _narrative_event_resolving:
-		print("[Narrative] Ignored duplicate resolve request choice=%s" % choice_id.strip_edges())
+		_debug_narrative("Ignored duplicate resolve request choice=%s" % choice_id.strip_edges())
 		return
 	if not has_active_narrative_event():
 		add_recent_event("No active narrative event to resolve.")
@@ -792,6 +794,11 @@ func resolve_narrative_event(choice_id: String) -> void:
 	_emit_recent_events_updated()
 	_emit_narrative_event_updated()
 	_narrative_event_resolving = false
+
+func _debug_narrative(message: String) -> void:
+	if not DEBUG_NARRATIVE_LOGS:
+		return
+	print("[Narrative] %s" % message)
 
 func generate_daily_event() -> Dictionary:
 	var rng: RandomNumberGenerator = RandomNumberGenerator.new()
