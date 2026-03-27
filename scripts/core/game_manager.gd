@@ -649,19 +649,22 @@ func get_current_narrative_event() -> Dictionary:
 	return _sanitize_narrative_event(current_narrative_event)
 
 func can_offer_doctor_visit() -> bool:
-	return not get_injured_gladiators().is_empty()
+	return not get_injured_gladiators().is_empty() and gold >= DOCTOR_VISIT_COST_GOLD
 
 func can_offer_crowd_favor() -> bool:
 	return gold >= CROWD_FAVOR_COST_GOLD
 
 func can_offer_harsh_training() -> bool:
-	return not _first_available_gladiator_for_action().is_empty()
+	return not _first_available_gladiator_for_action(ACTION_CONTEXT_SPECIAL_EVENT).is_empty()
 
 func can_offer_ambitious_gladiator() -> bool:
 	return not get_injured_gladiators().is_empty()
 
 func can_offer_specialized_training() -> bool:
-	return not _first_available_gladiator_for_action().is_empty()
+	return not _first_available_gladiator_for_action(ACTION_CONTEXT_SPECIAL_EVENT).is_empty()
+
+func can_offer_rivalry() -> bool:
+	return not _first_available_gladiator_for_action(ACTION_CONTEXT_NORMAL_FIGHT).is_empty()
 
 func can_offer_wager() -> bool:
 	return pending_wager_stake <= 0 and gold >= WAGER_STAKE_GOLD
@@ -673,7 +676,6 @@ func generate_narrative_event() -> Dictionary:
 		if can_offer_doctor_visit():
 			pending_doctor_offer = false
 			return _build_doctor_visit_event()
-		pending_doctor_offer = false
 	if rng.randf() >= NARRATIVE_EVENT_CHANCE:
 		return {}
 	var eligible_ids: Array[String] = []
@@ -685,7 +687,8 @@ func generate_narrative_event() -> Dictionary:
 		eligible_ids.append(NARRATIVE_EVENT_HARSH_TRAINING)
 	if can_offer_ambitious_gladiator():
 		eligible_ids.append(NARRATIVE_EVENT_AMBITIOUS_GLADIATOR)
-	eligible_ids.append(NARRATIVE_EVENT_RIVALRY)
+	if can_offer_rivalry():
+		eligible_ids.append(NARRATIVE_EVENT_RIVALRY)
 	eligible_ids.append(NARRATIVE_EVENT_PATRON_OFFER)
 	if can_offer_specialized_training():
 		eligible_ids.append(NARRATIVE_EVENT_SPECIALIZED_TRAINING)
@@ -917,8 +920,7 @@ func start_next_fight() -> Dictionary:
 		"player_gladiator_id": str(player_fighter.get("id", "")),
 		"enemy_gladiator_id": str(enemy_fighter.get("id", "")),
 	}
-	if active_event_type != EVENT_TYPE_TOURNAMENT:
-		mark_gladiator_acted_this_phase(player_fighter_id)
+	mark_gladiator_acted_this_phase(player_fighter_id)
 	pending_match = {
 		"event_type": active_event_type,
 		"tournament_match_index": tournament_match_index,
@@ -1081,6 +1083,7 @@ func resolve_fight(result: Dictionary) -> void:
 	var reward_summary: Dictionary = award_post_fight_rewards(winner_id, loser_id, result, active_event)
 	result["reward_summary"] = reward_summary
 	result["player_outcome"] = str(reward_summary.get("player_outcome", "UNKNOWN"))
+	result["combat_log"] = _remap_beast_combat_log_entries(result.get("combat_log", []), current_fight_payload)
 	_consume_next_fight_flags()
 
 	battle_history.append({
@@ -1447,6 +1450,51 @@ func _combat_log_to_text(raw_log: Variant) -> String:
 	if log_lines.is_empty():
 		return "(combat log empty)"
 	return "\n".join(log_lines)
+
+func _remap_beast_combat_log_entries(raw_log: Variant, payload: Dictionary) -> Array[String]:
+	if typeof(raw_log) != TYPE_ARRAY:
+		return []
+	var enemy_fighter: Dictionary = payload.get("fighter_b", {}) as Dictionary
+	if not bool(enemy_fighter.get("is_beast", false)):
+		var passthrough: Array[String] = []
+		for entry: Variant in (raw_log as Array):
+			passthrough.append(str(entry))
+		return passthrough
+	var beast_name: String = get_gladiator_display_name(enemy_fighter)
+	var beast_subtype: String = str(enemy_fighter.get("subtype", BEAST_TYPE_WOLF))
+	var mapped_lines: Array[String] = []
+	for entry: Variant in (raw_log as Array):
+		mapped_lines.append(_remap_beast_combat_log_line(str(entry), beast_name, beast_subtype))
+	return mapped_lines
+
+func _remap_beast_combat_log_line(line: String, beast_name: String, beast_subtype: String) -> String:
+	var mapped: String = line
+	var attack_label: String = "Savage Strike"
+	var heavy_label: String = "Crushing Blow"
+	if beast_subtype == BEAST_TYPE_WOLF:
+		attack_label = "Rending Bite"
+		heavy_label = "Pounce"
+	elif beast_subtype == BEAST_TYPE_BOAR:
+		attack_label = "Tusks Slash"
+		heavy_label = "Gore Charge"
+	elif beast_subtype == BEAST_TYPE_LION:
+		attack_label = "Raking Claws"
+		heavy_label = "Maul"
+	if mapped.find("%s uses Net Throw" % beast_name) >= 0:
+		mapped = mapped.replace("Net Throw", heavy_label)
+	if mapped.find("%s uses Shield Bash" % beast_name) >= 0:
+		mapped = mapped.replace("Shield Bash", heavy_label)
+	if mapped.find("%s uses Basic Attack" % beast_name) >= 0:
+		mapped = mapped.replace("Basic Attack", attack_label)
+	if mapped.find("%s uses BASIC_ATTACK" % beast_name) >= 0:
+		mapped = mapped.replace("BASIC_ATTACK", attack_label)
+	if mapped.find("%s becomes Off-Balance" % beast_name) >= 0:
+		mapped = mapped.replace("Off-Balance", "Overextended")
+	if mapped.find("Shield Bash cannot crit due to Entangled.") >= 0:
+		mapped = mapped.replace("Shield Bash", heavy_label)
+	if mapped.find("Off-Balance reduces damage") >= 0:
+		mapped = mapped.replace("Off-Balance", "Overextended")
+	return mapped
 
 func _sanitize_filename_component(value: String) -> String:
 	var normalized: String = value.strip_edges().to_lower().replace(" ", "_")
@@ -2001,7 +2049,7 @@ func _build_patron_offer_event() -> Dictionary:
 	}
 
 func _build_specialized_training_event() -> Dictionary:
-	var target: Dictionary = _first_available_gladiator_for_action()
+	var target: Dictionary = _first_available_gladiator_for_action(ACTION_CONTEXT_SPECIAL_EVENT)
 	var target_id: String = str(target.get("id", ""))
 	var target_name: String = get_gladiator_display_name(target) if not target.is_empty() else "No available gladiator"
 	return {
@@ -2200,7 +2248,7 @@ func _resolve_specialized_training_choice(choice_id: String) -> String:
 		if not is_gladiator_eligible_for_action(target_id, ACTION_CONTEXT_TRAINING, false):
 			target = {}
 	if target.is_empty():
-		target = _first_available_gladiator_for_action()
+		target = _first_available_gladiator_for_action(ACTION_CONTEXT_SPECIAL_EVENT)
 	if target.is_empty():
 		return "No available gladiator for specialized drills."
 	var resolved_target_id: String = str(target.get("id", "")).strip_edges()
@@ -2242,10 +2290,10 @@ func _most_injured_gladiator() -> Dictionary:
 			target = gladiator
 	return target
 
-func _first_available_gladiator_for_action() -> Dictionary:
+func _first_available_gladiator_for_action(action_context: String) -> Dictionary:
 	for gladiator: Dictionary in roster:
 		var gladiator_id: String = str(gladiator.get("id", "")).strip_edges()
-		if not is_gladiator_eligible_for_action(gladiator_id, ACTION_CONTEXT_SPECIAL_EVENT, false):
+		if not is_gladiator_eligible_for_action(gladiator_id, action_context, false):
 			continue
 		return gladiator
 	return {}
