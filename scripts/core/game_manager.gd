@@ -11,8 +11,8 @@ signal daily_event_updated(event_data: Dictionary)
 signal narrative_event_updated(event_data: Dictionary)
 
 const SAVE_PATH: String = "user://savegame.json"
-const BATTLE_REPORTS_DIR: String = "user://battle_reports"
-const CAMPAIGN_LOG_PATH: String = "user://campaign_log.txt"
+const CAMPAIGN_RUNS_ROOT_DIR: String = "user://campaign_runs"
+const FIGHT_REPORTS_SUBDIR: String = "fight_reports"
 
 const STATE_RUNNING: String = "running"
 const STATE_VICTORY: String = "victory"
@@ -145,6 +145,7 @@ var next_fight_risk_modifier_mult: float = 1.0
 var pending_wager_stake: int = 0
 var campaign_length_turns: int = DEFAULT_CAMPAIGN_LENGTH_TURNS
 var campaign_victory_mode: String = STANDARD_CAMPAIGN_VICTORY_MODE
+var campaign_run_id: String = ""
 
 var _content_registry: ContentRegistry
 var _stats_resolver: BuildStatsResolver
@@ -181,7 +182,9 @@ func _ready() -> void:
 	ensure_log_directories()
 
 func new_game() -> void:
+	campaign_run_id = _generate_campaign_run_id()
 	ensure_log_directories()
+	_initialize_campaign_log()
 	gold = STARTING_GOLD
 	fame = STARTING_FAME
 	day = STARTING_DAY
@@ -271,6 +274,7 @@ func save_game() -> bool:
 		"next_fight_bonus_gold": next_fight_bonus_gold,
 		"next_fight_risk_modifier_mult": next_fight_risk_modifier_mult,
 		"pending_wager_stake": pending_wager_stake,
+		"campaign_run_id": campaign_run_id,
 	}
 	var serialized: String = JSON.stringify(payload, "\t", false)
 	var file: FileAccess = FileAccess.open(SAVE_PATH, FileAccess.WRITE)
@@ -732,6 +736,8 @@ func start_next_fight() -> Dictionary:
 		"enemy_gladiator_id": str(enemy_fighter.get("id", "")),
 		"attacker_build_id": _build_id_for_class(str(player_fighter.get("class", ""))),
 		"defender_build_id": _build_enemy_build_id(enemy_fighter),
+		"attacker_label": _build_combatant_identity_label(player_fighter),
+		"defender_label": _build_combatant_identity_label(enemy_fighter),
 		"event_type": active_event_type,
 		"encounter_label": _build_encounter_label(active_event_type, enemy_fighter),
 		"enemy_kind": "BEAST" if bool(enemy_fighter.get("is_beast", false)) else "GLADIATOR",
@@ -926,7 +932,7 @@ func resolve_fight(result: Dictionary) -> void:
 	])
 	_add_player_outcome_event(winner_id, loser_id, loser_dead, reward_summary)
 	append_campaign_log("%s - Fight result: %s defeated %s in %d turns (%s)." % [
-		format_phase_label(),
+		_format_fight_context_prefix(active_event),
 		get_gladiator_display_name(winner) if not winner.is_empty() else winner_id,
 		get_gladiator_display_name(loser) if not loser.is_empty() else loser_id,
 		int(result.get("turns", 0)),
@@ -957,12 +963,14 @@ func check_end_conditions() -> void:
 		_set_game_state(STATE_DEFEAT)
 		add_recent_event("All your gladiators are dead.")
 		append_campaign_log("%s - Campaign defeat: all gladiators are dead." % format_phase_label())
+		append_campaign_log("=== CAMPAIGN END (%s): DEFEAT ===" % campaign_run_id)
 		return
 	var victory_status: Dictionary = _evaluate_campaign_victory_status()
 	if bool(victory_status.get("achieved", false)):
 		_set_game_state(STATE_VICTORY)
 		add_recent_event("You survived all 30 Phases.")
 		append_campaign_log("%s - Campaign victory achieved: %s" % [format_phase_label(), str(victory_status.get("reason", "unknown reason"))])
+		append_campaign_log("=== CAMPAIGN END (%s): VICTORY ===" % campaign_run_id)
 
 func _evaluate_campaign_victory_status() -> Dictionary:
 	var turn_value: int = day
@@ -1149,29 +1157,43 @@ func add_recent_event(event_text: String) -> void:
 		recent_events.remove_at(0)
 
 func ensure_log_directories() -> void:
-	var error_code: int = DirAccess.make_dir_absolute(BATTLE_REPORTS_DIR)
-	if error_code != OK and error_code != ERR_ALREADY_EXISTS:
-		push_warning("GameManager.ensure_log_directories: failed to create %s (error %d)." % [BATTLE_REPORTS_DIR, error_code])
+	var root_error: int = DirAccess.make_dir_absolute(CAMPAIGN_RUNS_ROOT_DIR)
+	if root_error != OK and root_error != ERR_ALREADY_EXISTS:
+		push_warning("GameManager.ensure_log_directories: failed to create %s (error %d)." % [CAMPAIGN_RUNS_ROOT_DIR, root_error])
+		return
+	if campaign_run_id == "":
+		return
+	var run_error: int = DirAccess.make_dir_absolute(_campaign_run_dir_path())
+	if run_error != OK and run_error != ERR_ALREADY_EXISTS:
+		push_warning("GameManager.ensure_log_directories: failed to create %s (error %d)." % [_campaign_run_dir_path(), run_error])
+		return
+	var reports_error: int = DirAccess.make_dir_absolute(_campaign_fight_reports_dir_path())
+	if reports_error != OK and reports_error != ERR_ALREADY_EXISTS:
+		push_warning("GameManager.ensure_log_directories: failed to create %s (error %d)." % [_campaign_fight_reports_dir_path(), reports_error])
 
 func append_campaign_log(message: String) -> void:
 	var normalized: String = message.strip_edges()
 	if normalized == "":
 		return
+	if campaign_run_id == "":
+		campaign_run_id = _generate_campaign_run_id()
 	ensure_log_directories()
 	var file: FileAccess = null
-	if FileAccess.file_exists(CAMPAIGN_LOG_PATH):
-		file = FileAccess.open(CAMPAIGN_LOG_PATH, FileAccess.READ_WRITE)
-		if file != null:
-			file.seek_end()
+	if FileAccess.file_exists(_campaign_log_path()):
+		file = FileAccess.open(_campaign_log_path(), FileAccess.READ_WRITE)
 	else:
-		file = FileAccess.open(CAMPAIGN_LOG_PATH, FileAccess.WRITE)
+		file = FileAccess.open(_campaign_log_path(), FileAccess.WRITE)
 	if file == null:
-		push_warning("GameManager.append_campaign_log: failed to open %s." % CAMPAIGN_LOG_PATH)
+		push_warning("GameManager.append_campaign_log: failed to open %s." % _campaign_log_path())
 		return
+	if file.get_length() > 0:
+		file.seek_end()
 	file.store_line(normalized)
 	file.close()
 
 func write_battle_report(result: Dictionary, event_data: Dictionary = {}) -> void:
+	if campaign_run_id == "":
+		campaign_run_id = _generate_campaign_run_id()
 	ensure_log_directories()
 	var payload: Dictionary = current_fight_payload.duplicate(true)
 	var player_fighter: Dictionary = payload.get("fighter_a", {}) as Dictionary
@@ -1182,7 +1204,7 @@ func write_battle_report(result: Dictionary, event_data: Dictionary = {}) -> voi
 	var player_name_part: String = _sanitize_filename_component(get_gladiator_display_name(player_fighter))
 	var enemy_name_part: String = _sanitize_filename_component(get_gladiator_display_name(enemy_fighter))
 	var filename: String = "%s/day_%03d_fight_%03d_%s_vs_%s.txt" % [
-		BATTLE_REPORTS_DIR,
+		_campaign_fight_reports_dir_path(),
 		day,
 		battle_index,
 		player_name_part,
@@ -1196,6 +1218,11 @@ func write_battle_report(result: Dictionary, event_data: Dictionary = {}) -> voi
 	lines.append("Phase: %d" % day)
 	lines.append("Event Type: %s" % event_type)
 	lines.append("Event Name: %s" % event_name)
+	lines.append("Campaign Run ID: %s" % campaign_run_id)
+	lines.append("Matchup Label: %s vs %s" % [
+		str(payload.get("attacker_label", str(payload.get("attacker_build_id", "")))),
+		str(payload.get("defender_label", str(payload.get("defender_build_id", "")))),
+	)])
 	lines.append("Player Gladiator: id=%s, name=%s, class=%s, level=%d" % [
 		str(player_fighter.get("id", "")),
 		get_gladiator_display_name(player_fighter),
@@ -1267,6 +1294,19 @@ func _sanitize_filename_component(value: String) -> String:
 			output += ch
 	if output == "":
 		return "unknown"
+	return output
+
+func _sanitize_run_id(value: String) -> String:
+	var normalized: String = value.strip_edges()
+	var output: String = ""
+	for i: int in range(normalized.length()):
+		var ch: String = normalized.substr(i, 1)
+		var code: int = ch.unicode_at(0)
+		var is_lowercase: bool = code >= 97 and code <= 122
+		var is_uppercase: bool = code >= 65 and code <= 90
+		var is_digit: bool = code >= 48 and code <= 57
+		if is_lowercase or is_uppercase or is_digit or ch == "_" or ch == "-":
+			output += ch
 	return output
 
 func _bootstrap_content() -> void:
@@ -1397,6 +1437,56 @@ func _build_enemy_build_id(enemy_fighter: Dictionary) -> String:
 		return RET_BUILD_ID
 	return _build_id_for_class(str(enemy_fighter.get("class", "")))
 
+func _build_combatant_identity_label(fighter: Dictionary) -> String:
+	if bool(fighter.get("is_beast", false)):
+		return str(fighter.get("subtype", BEAST_TYPE_WOLF))
+	var fighter_class: String = str(fighter.get("class", ""))
+	return _build_id_for_class(fighter_class)
+
+func _format_fight_context_prefix(event_data: Dictionary) -> String:
+	var base: String = format_phase_label()
+	var event_type: String = _event_type(event_data)
+	if event_type == EVENT_TYPE_TOURNAMENT:
+		var match_index: int = int(current_fight_payload.get("tournament_match_index", 0))
+		var total_matches: int = int(current_fight_payload.get("tournament_total_matches", 0))
+		if match_index > 0 and total_matches > 0:
+			return "%s - Tournament fight %d/%d" % [base, match_index, total_matches]
+	return base
+
+func _campaign_run_dir_path() -> String:
+	return "%s/%s" % [CAMPAIGN_RUNS_ROOT_DIR, campaign_run_id]
+
+func _campaign_fight_reports_dir_path() -> String:
+	return "%s/%s" % [_campaign_run_dir_path(), FIGHT_REPORTS_SUBDIR]
+
+func _campaign_log_path() -> String:
+	return "%s/campaign_log.txt" % _campaign_run_dir_path()
+
+func _initialize_campaign_log() -> void:
+	if campaign_run_id == "":
+		return
+	ensure_log_directories()
+	var file: FileAccess = FileAccess.open(_campaign_log_path(), FileAccess.WRITE)
+	if file == null:
+		push_warning("GameManager._initialize_campaign_log: failed to open %s." % _campaign_log_path())
+		return
+	file.store_line("=== CAMPAIGN RUN START ===")
+	file.store_line("Run ID: %s" % campaign_run_id)
+	file.store_line("Started UTC: %s" % Time.get_datetime_string_from_system(true, true))
+	file.store_line("")
+	file.close()
+
+func _generate_campaign_run_id() -> String:
+	var datetime: Dictionary = Time.get_datetime_dict_from_system(true)
+	return "%04d-%02d-%02d_%02d-%02d-%02d" % [
+		int(datetime.get("year", 1970)),
+		int(datetime.get("month", 1)),
+		int(datetime.get("day", 1)),
+		int(datetime.get("hour", 0)),
+		int(datetime.get("minute", 0)),
+		int(datetime.get("second", 0)),
+	]
+
 func _build_encounter_label(event_type: String, enemy_fighter: Dictionary) -> String:
 	if event_type == EVENT_TYPE_TOURNAMENT:
 		var match_number: int = int(active_tournament.get("current_match", 1))
@@ -1496,6 +1586,12 @@ func _apply_loaded_data(data: Dictionary) -> void:
 	next_fight_bonus_gold = maxi(0, int(data.get("next_fight_bonus_gold", 0)))
 	next_fight_risk_modifier_mult = _sanitize_multiplier(data.get("next_fight_risk_modifier_mult", 1.0), 1.0)
 	pending_wager_stake = maxi(0, int(data.get("pending_wager_stake", 0)))
+	campaign_run_id = _sanitize_run_id(str(data.get("campaign_run_id", "")))
+	if campaign_run_id == "":
+		campaign_run_id = _generate_campaign_run_id()
+		_initialize_campaign_log()
+	else:
+		ensure_log_directories()
 	if has_active_tournament() and locked_tournament_gladiator_id == "":
 		locked_tournament_gladiator_id = str(active_tournament.get("gladiator_id", ""))
 	if has_active_tournament() and not can_continue_active_tournament():

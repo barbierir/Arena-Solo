@@ -26,7 +26,7 @@ func configure(registry: ContentRegistry, rng: SeededRngService) -> void:
 func bootstrap_default_encounter(attacker_build_id: String, defender_build_id: String) -> void:
 	initialize_fight(attacker_build_id, defender_build_id)
 
-func initialize_fight(attacker_build_id: String, defender_build_id: String) -> void:
+func initialize_fight(attacker_build_id: String, defender_build_id: String, attacker_label: String = "", defender_label: String = "") -> void:
 	runtime_state = COMBAT_RUNTIME_STATE_SCRIPT.new()
 	runtime_state.attacker_build_id = attacker_build_id
 	runtime_state.defender_build_id = defender_build_id
@@ -37,7 +37,9 @@ func initialize_fight(attacker_build_id: String, defender_build_id: String) -> v
 	runtime_state.matchup_modifiers = matchup_modifier_resolver.resolve(attacker_build_id, defender_build_id, content_registry)
 	_apply_matchup_hp_modifiers(runtime_state)
 	runtime_state.next_actor_id = _resolve_first_actor()
-	runtime_state.append_log("Encounter initialized: %s vs %s (seed=%d)" % [attacker_build_id, defender_build_id, rng_service.get_seed()])
+	var log_attacker: String = attacker_build_id if attacker_label.strip_edges() == "" else attacker_label
+	var log_defender: String = defender_build_id if defender_label.strip_edges() == "" else defender_label
+	runtime_state.append_log("Encounter initialized: %s vs %s (seed=%d)" % [log_attacker, log_defender, rng_service.get_seed()])
 	if not runtime_state.matchup_modifiers.is_empty():
 		runtime_state.append_log("Matchup modifiers active: %s" % JSON.stringify(runtime_state.matchup_modifiers))
 

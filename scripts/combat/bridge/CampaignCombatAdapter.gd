@@ -16,6 +16,8 @@ func run_payload(payload: Dictionary) -> Dictionary:
 		return {"error": "Empty payload"}
 	var attacker_id: String = str(payload.get("attacker_build_id", ""))
 	var defender_id: String = str(payload.get("defender_build_id", ""))
+	var attacker_label: String = str(payload.get("attacker_label", attacker_id))
+	var defender_label: String = str(payload.get("defender_label", defender_id))
 	if attacker_id == "" or defender_id == "":
 		return {"error": "Missing build ids in payload"}
 
@@ -23,7 +25,7 @@ func run_payload(payload: Dictionary) -> Dictionary:
 	var rng_service: SeededRngService = RNG_SERVICE_SCRIPT.new(fight_seed)
 	var simulation: CombatSimulation = COMBAT_SIMULATION_SCRIPT.new()
 	simulation.configure(_content_registry, rng_service)
-	simulation.initialize_fight(attacker_id, defender_id)
+	simulation.initialize_fight(attacker_id, defender_id, attacker_label, defender_label)
 	simulation.run_to_completion()
 
 	var runtime_state: CombatRuntimeState = simulation.get_runtime_state()
