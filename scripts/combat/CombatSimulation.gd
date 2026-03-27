@@ -39,6 +39,8 @@ func initialize_fight(attacker_build_id: String, defender_build_id: String, atta
 	runtime_state.next_actor_id = _resolve_first_actor()
 	var log_attacker: String = attacker_build_id if attacker_label.strip_edges() == "" else attacker_label
 	var log_defender: String = defender_build_id if defender_label.strip_edges() == "" else defender_label
+	runtime_state.attacker_state().display_name = log_attacker
+	runtime_state.defender_state().display_name = log_defender
 	runtime_state.append_log("Encounter initialized: %s vs %s (seed=%d)" % [log_attacker, log_defender, rng_service.get_seed()])
 	if not runtime_state.matchup_modifiers.is_empty():
 		runtime_state.append_log("Matchup modifiers active: %s" % JSON.stringify(runtime_state.matchup_modifiers))

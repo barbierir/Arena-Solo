@@ -143,6 +143,8 @@ var next_fight_bonus_fame: int = 0
 var next_fight_bonus_gold: int = 0
 var next_fight_risk_modifier_mult: float = 1.0
 var pending_wager_stake: int = 0
+var acted_gladiator_ids_this_phase: Array[String] = []
+var pending_doctor_offer: bool = false
 var campaign_length_turns: int = DEFAULT_CAMPAIGN_LENGTH_TURNS
 var campaign_victory_mode: String = STANDARD_CAMPAIGN_VICTORY_MODE
 var campaign_run_id: String = ""
@@ -200,6 +202,8 @@ func new_game() -> void:
 	current_event = generate_daily_event()
 	current_narrative_event = {}
 	active_tournament = {}
+	acted_gladiator_ids_this_phase.clear()
+	pending_doctor_offer = false
 	next_fight_enemy_level_bonus = 0
 	next_fight_bonus_fame = 0
 	next_fight_bonus_gold = 0
@@ -274,6 +278,8 @@ func save_game() -> bool:
 		"next_fight_bonus_gold": next_fight_bonus_gold,
 		"next_fight_risk_modifier_mult": next_fight_risk_modifier_mult,
 		"pending_wager_stake": pending_wager_stake,
+		"acted_gladiator_ids_this_phase": acted_gladiator_ids_this_phase,
+		"pending_doctor_offer": pending_doctor_offer,
 		"campaign_run_id": campaign_run_id,
 	}
 	var serialized: String = JSON.stringify(payload, "\t", false)
@@ -291,6 +297,7 @@ func advance_turn() -> void:
 	if not can_advance_turn():
 		return
 	day += 1
+	acted_gladiator_ids_this_phase.clear()
 	append_campaign_log(format_advance_phase_log(day - 1, day))
 	current_event = generate_daily_event()
 	current_narrative_event = generate_narrative_event()
@@ -298,6 +305,8 @@ func advance_turn() -> void:
 	if _is_rest_event(current_event):
 		apply_rest_day_recovery_bonus()
 	apply_daily_upkeep()
+	if _event_type(current_event) == EVENT_TYPE_FIGHT and current_narrative_event.is_empty():
+		append_campaign_log("%s - No special arena event this phase. Recovery and upkeep applied." % format_phase_label())
 	check_end_conditions()
 	save_game()
 	roster_updated.emit()
@@ -340,8 +349,17 @@ func get_recent_events() -> Array[String]:
 
 func get_available_gladiators() -> Array[Dictionary]:
 	var available: Array[Dictionary] = []
+	var tournament_locked_id: String = ""
+	if has_active_tournament() and can_continue_active_tournament():
+		tournament_locked_id = str(active_tournament.get("gladiator_id", "")).strip_edges()
 	for gladiator: Dictionary in roster:
 		if get_gladiator_status(gladiator) == STATUS_AVAILABLE:
+			var gladiator_id: String = str(gladiator.get("id", "")).strip_edges()
+			if tournament_locked_id != "":
+				if gladiator_id != tournament_locked_id:
+					continue
+			elif has_gladiator_acted_this_phase(gladiator_id):
+				continue
 			available.append(gladiator.duplicate(true))
 	return available
 
@@ -370,6 +388,12 @@ func set_selected_gladiator(gladiator_id: String) -> bool:
 	if fighter.is_empty():
 		return false
 	if get_gladiator_status(fighter) != STATUS_AVAILABLE:
+		return false
+	if has_active_tournament() and can_continue_active_tournament():
+		var locked_id: String = str(active_tournament.get("gladiator_id", "")).strip_edges()
+		if locked_id != "" and normalized_id != locked_id:
+			return false
+	elif has_gladiator_acted_this_phase(normalized_id):
 		return false
 	selected_gladiator_id = normalized_id
 	return true
@@ -442,7 +466,16 @@ func can_start_fight() -> bool:
 		return can_continue_active_tournament()
 	if _is_rest_event(get_current_event()):
 		return false
-	return get_available_gladiators().size() >= 1
+	for gladiator: Dictionary in roster:
+		if get_gladiator_status(gladiator) != STATUS_AVAILABLE:
+			continue
+		var gladiator_id: String = str(gladiator.get("id", "")).strip_edges()
+		if gladiator_id == "":
+			continue
+		if has_gladiator_acted_this_phase(gladiator_id):
+			continue
+		return true
+	return false
 
 func has_active_tournament() -> bool:
 	return not active_tournament.is_empty()
@@ -469,8 +502,6 @@ func can_continue_active_tournament() -> bool:
 	if not bool(selected.get("alive", false)):
 		return false
 	if int(selected.get("injured_days", 0)) > 0:
-		return false
-	if get_available_gladiators().is_empty():
 		return false
 	return true
 
@@ -518,13 +549,13 @@ func can_offer_crowd_favor() -> bool:
 	return gold >= CROWD_FAVOR_COST_GOLD
 
 func can_offer_harsh_training() -> bool:
-	return not get_available_alive_gladiators().is_empty()
+	return not _first_available_gladiator_for_action().is_empty()
 
 func can_offer_ambitious_gladiator() -> bool:
 	return not get_injured_gladiators().is_empty()
 
 func can_offer_specialized_training() -> bool:
-	return not get_available_alive_gladiators().is_empty()
+	return not _first_available_gladiator_for_action().is_empty()
 
 func can_offer_wager() -> bool:
 	return pending_wager_stake <= 0 and gold >= WAGER_STAKE_GOLD
@@ -532,6 +563,11 @@ func can_offer_wager() -> bool:
 func generate_narrative_event() -> Dictionary:
 	var rng: RandomNumberGenerator = RandomNumberGenerator.new()
 	rng.seed = int(hash("narrative-event-%d-%d-%d" % [day, next_gladiator_index, roster.size()]))
+	if pending_doctor_offer:
+		if can_offer_doctor_visit():
+			pending_doctor_offer = false
+			return _build_doctor_visit_event()
+		pending_doctor_offer = false
 	if rng.randf() >= NARRATIVE_EVENT_CHANCE:
 		return {}
 	var eligible_ids: Array[String] = []
@@ -554,6 +590,7 @@ func generate_narrative_event() -> Dictionary:
 	var selected_index: int = rng.randi_range(0, eligible_ids.size() - 1)
 	var selected_event_id: String = eligible_ids[selected_index]
 	if selected_event_id == NARRATIVE_EVENT_DOCTOR_VISIT:
+		pending_doctor_offer = false
 		return _build_doctor_visit_event()
 	if selected_event_id == NARRATIVE_EVENT_CROWD_FAVOR:
 		return _build_crowd_favor_event()
@@ -694,6 +731,14 @@ func start_next_fight() -> Dictionary:
 			return {"error": "No valid player gladiator found"}
 		player_fighter = available[0]
 		selected_gladiator_id = str(player_fighter.get("id", ""))
+	var player_fighter_id: String = str(player_fighter.get("id", "")).strip_edges()
+	if player_fighter_id == "":
+		return {"error": "No valid player gladiator found"}
+	if not has_active_tournament() and has_gladiator_acted_this_phase(player_fighter_id):
+		var acted_name: String = get_gladiator_display_name(player_fighter)
+		add_recent_event("%s already acted this phase." % acted_name)
+		_emit_recent_events_updated()
+		return {"error": "%s already acted this phase" % acted_name}
 	var active_event_type: String = _event_type(today_event)
 	if has_active_tournament():
 		active_event_type = EVENT_TYPE_TOURNAMENT
@@ -754,6 +799,8 @@ func start_next_fight() -> Dictionary:
 		"player_gladiator_id": str(player_fighter.get("id", "")),
 		"enemy_gladiator_id": str(enemy_fighter.get("id", "")),
 	}
+	if active_event_type != EVENT_TYPE_TOURNAMENT:
+		mark_gladiator_acted_this_phase(player_fighter_id)
 	pending_match = {
 		"event_type": active_event_type,
 		"tournament_match_index": tournament_match_index,
@@ -897,6 +944,8 @@ func resolve_fight(result: Dictionary) -> void:
 
 	var winner: Dictionary = _find_gladiator_by_id(winner_id)
 	var loser: Dictionary = _find_gladiator_by_id(loser_id)
+	var winner_name: String = _resolve_combatant_name_for_result(winner_id, winner)
+	var loser_name: String = _resolve_combatant_name_for_result(loser_id, loser)
 	var injury_applied_days: int = 0
 	if not winner.is_empty():
 		winner["wins"] = int(winner.get("wins", 0)) + 1
@@ -926,15 +975,15 @@ func resolve_fight(result: Dictionary) -> void:
 		"combat_log": result.get("combat_log", []),
 	})
 	add_recent_event("Combattimento concluso: %s ha sconfitto %s in %d turni." % [
-		get_gladiator_display_name(winner) if not winner.is_empty() else winner_id,
-		get_gladiator_display_name(loser) if not loser.is_empty() else loser_id,
+		winner_name,
+		loser_name,
 		int(result.get("turns", 0)),
 	])
 	_add_player_outcome_event(winner_id, loser_id, loser_dead, reward_summary)
 	append_campaign_log("%s - Fight result: %s defeated %s in %d turns (%s)." % [
 		_format_fight_context_prefix(active_event),
-		get_gladiator_display_name(winner) if not winner.is_empty() else winner_id,
-		get_gladiator_display_name(loser) if not loser.is_empty() else loser_id,
+		winner_name,
+		loser_name,
 		int(result.get("turns", 0)),
 		str(result.get("player_outcome", "UNKNOWN")),
 	])
@@ -980,15 +1029,11 @@ func _evaluate_campaign_victory_status() -> Dictionary:
 		mode = STANDARD_CAMPAIGN_VICTORY_MODE
 	var reached_turn_target: bool = turn_value >= target_turn
 	if mode == STANDARD_CAMPAIGN_VICTORY_MODE:
-		append_campaign_log("Campaign victory check: phase %d/%d, %s." % [turn_value, target_turn, "victory achieved" if reached_turn_target else "continue campaign"])
-		append_campaign_log("Campaign victory check: alternate fame victory disabled in standard mode.")
 		if reached_turn_target:
 			return {"achieved": true, "reason": "reached final phase (%d/%d)." % [turn_value, target_turn]}
 		return {"achieved": false}
 	var fame_value: int = fame
 	var reached_fame_target: bool = fame_value >= VICTORY_FAME_TARGET
-	append_campaign_log("Campaign victory check: phase %d/%d, %s." % [turn_value, target_turn, "victory achieved" if reached_turn_target else "continue campaign"])
-	append_campaign_log("Campaign victory check: fame target %d/%d, %s." % [fame_value, VICTORY_FAME_TARGET, "victory achieved" if reached_fame_target else "continue campaign"])
 	if reached_turn_target:
 		return {"achieved": true, "reason": "reached final phase (%d/%d)." % [turn_value, target_turn]}
 	if reached_fame_target:
@@ -1144,7 +1189,10 @@ func apply_injury_from_fight(gladiator_id: String, result: Dictionary) -> int:
 		injury_days = injury_rng.randi_range(INJURY_DAYS_HEAVY_LOSS_MIN, INJURY_DAYS_HEAVY_LOSS_MAX)
 	else:
 		injury_days = injury_rng.randi_range(INJURY_DAYS_LIGHT_LOSS_MIN, INJURY_DAYS_LIGHT_LOSS_MAX)
+	var had_injury_before: bool = int(gladiator.get("injured_days", 0)) > 0
 	gladiator["injured_days"] = maxi(1, injury_days)
+	if not had_injury_before:
+		pending_doctor_offer = true
 	add_recent_event("%s injured for %s." % [get_gladiator_display_name(gladiator), format_injury_duration_phrasing(injury_days)])
 	return injury_days
 
@@ -1586,6 +1634,8 @@ func _apply_loaded_data(data: Dictionary) -> void:
 	next_fight_bonus_gold = maxi(0, int(data.get("next_fight_bonus_gold", 0)))
 	next_fight_risk_modifier_mult = _sanitize_multiplier(data.get("next_fight_risk_modifier_mult", 1.0), 1.0)
 	pending_wager_stake = maxi(0, int(data.get("pending_wager_stake", 0)))
+	acted_gladiator_ids_this_phase = _sanitize_gladiator_id_list(data.get("acted_gladiator_ids_this_phase", []))
+	pending_doctor_offer = bool(data.get("pending_doctor_offer", false))
 	campaign_run_id = _sanitize_run_id(str(data.get("campaign_run_id", "")))
 	if campaign_run_id == "":
 		campaign_run_id = _generate_campaign_run_id()
@@ -1600,6 +1650,22 @@ func _apply_loaded_data(data: Dictionary) -> void:
 	game_state = _sanitize_game_state(data.get("game_state", STATE_RUNNING))
 	if current_event.is_empty():
 		current_event = generate_daily_event()
+
+func _sanitize_gladiator_id_list(raw_value: Variant) -> Array[String]:
+	var sanitized: Array[String] = []
+	if typeof(raw_value) != TYPE_ARRAY:
+		return sanitized
+	var raw_array: Array = raw_value as Array
+	for item: Variant in raw_array:
+		var candidate_id: String = str(item).strip_edges()
+		if candidate_id == "":
+			continue
+		if _find_gladiator_by_id(candidate_id).is_empty():
+			continue
+		if sanitized.has(candidate_id):
+			continue
+		sanitized.append(candidate_id)
+	return sanitized
 
 func _sanitize_game_state(raw_value: Variant) -> String:
 	var state: String = str(raw_value).to_lower()
@@ -1780,11 +1846,12 @@ func _build_harsh_training_event() -> Dictionary:
 	return {
 		"id": NARRATIVE_EVENT_HARSH_TRAINING,
 		"title": "A Brutal Training Regimen",
-		"description": "Your trainers propose a punishing routine to force rapid improvement.",
+		"description": "Your trainers propose a punishing routine that affects one random eligible gladiator.",
 		"choices": [
-			{"id": "PUSH", "text": "Push the men harder (+3 XP to one available gladiator, 25% chance of +1 injury phase)"},
+			{"id": "PUSH", "text": "Push harder (+3 XP to one random eligible gladiator, 25% chance of +1 injury phase)"},
 			{"id": "NORMAL", "text": "Keep training normal (no effect)"},
 		],
+		"target_mode": "RANDOM_SINGLE",
 	}
 
 func _build_rivalry_event() -> Dictionary:
@@ -1821,15 +1888,21 @@ func _build_patron_offer_event() -> Dictionary:
 	}
 
 func _build_specialized_training_event() -> Dictionary:
+	var target: Dictionary = _first_available_gladiator_for_action()
+	var target_id: String = str(target.get("id", ""))
+	var target_name: String = get_gladiator_display_name(target) if not target.is_empty() else "No available gladiator"
 	return {
 		"id": NARRATIVE_EVENT_SPECIALIZED_TRAINING,
 		"title": "Specialized Drills",
-		"description": "A coach can sharpen offense at the expense of defense, or vice versa.",
+		"description": "A coach can sharpen offense at the expense of defense, or vice versa, for one specific gladiator: %s." % target_name,
 		"choices": [
-			{"id": "ATK_UP", "text": "Offensive focus (+1 ATK, -1 DEF)"},
-			{"id": "DEF_UP", "text": "Defensive focus (+1 DEF, -1 ATK)"},
+			{"id": "ATK_UP", "text": "Offensive drills for %s (+1 ATK, -1 DEF)" % target_name},
+			{"id": "DEF_UP", "text": "Defensive drills for %s (+1 DEF, -1 ATK)" % target_name},
 			{"id": "SKIP", "text": "Skip specialized training"},
 		],
+		"target_mode": "SPECIFIC_SINGLE",
+		"target_gladiator_id": target_id,
+		"target_gladiator_name": target_name,
 	}
 
 func _build_wager_event() -> Dictionary:
@@ -1888,11 +1961,17 @@ func _sanitize_narrative_event(raw_event: Variant) -> Dictionary:
 				if typeof(item) != TYPE_DICTIONARY:
 					continue
 				choices.append((item as Dictionary).duplicate(true))
+	var target_mode: String = str(source.get("target_mode", str(fallback.get("target_mode", ""))))
+	var target_gladiator_id: String = str(source.get("target_gladiator_id", str(fallback.get("target_gladiator_id", ""))))
+	var target_gladiator_name: String = str(source.get("target_gladiator_name", str(fallback.get("target_gladiator_name", ""))))
 	return {
 		"id": event_id,
 		"title": str(source.get("title", str(fallback.get("title", "Narrative Event")))),
 		"description": str(source.get("description", str(fallback.get("description", "")))),
 		"choices": choices,
+		"target_mode": target_mode,
+		"target_gladiator_id": target_gladiator_id,
+		"target_gladiator_name": target_gladiator_name,
 	}
 
 func _choice_exists(event_data: Dictionary, choice_id: String) -> bool:
@@ -1943,8 +2022,11 @@ func _resolve_harsh_training_choice(choice_id: String) -> String:
 		return "Nothing changes."
 	var candidates: Array[Dictionary] = []
 	for gladiator: Dictionary in roster:
-		if get_gladiator_status(gladiator) == STATUS_AVAILABLE:
-			candidates.append(gladiator)
+		if get_gladiator_status(gladiator) != STATUS_AVAILABLE:
+			continue
+		if has_gladiator_acted_this_phase(str(gladiator.get("id", ""))):
+			continue
+		candidates.append(gladiator)
 	if candidates.is_empty():
 		return "No gladiator was fit for brutal training."
 	var rng: RandomNumberGenerator = RandomNumberGenerator.new()
@@ -1957,7 +2039,11 @@ func _resolve_harsh_training_choice(choice_id: String) -> String:
 		target["injured_days"] = maxi(1, int(target.get("injured_days", 0)) + 1)
 		injury_applied = true
 	if injury_applied:
+		if int(target.get("injured_days", 0)) == 1:
+			pending_doctor_offer = true
+		mark_gladiator_acted_this_phase(str(target.get("id", "")))
 		return "Harsh training improved %s, but left them battered (+3 XP, +1 injury phase)." % get_gladiator_display_name(target)
+	mark_gladiator_acted_this_phase(str(target.get("id", "")))
 	return "Harsh training improved %s (+3 XP, no injury)." % get_gladiator_display_name(target)
 
 func _resolve_rivalry_choice(choice_id: String) -> String:
@@ -1994,16 +2080,26 @@ func _resolve_patron_offer_choice(choice_id: String) -> String:
 func _resolve_specialized_training_choice(choice_id: String) -> String:
 	if choice_id == "SKIP":
 		return "You skipped specialized drills."
-	var target: Dictionary = _first_available_gladiator()
+	var target: Dictionary = {}
+	var target_id: String = str(current_narrative_event.get("target_gladiator_id", "")).strip_edges()
+	if target_id != "":
+		target = _find_gladiator_by_id(target_id)
+		if target.is_empty() or get_gladiator_status(target) != STATUS_AVAILABLE or has_gladiator_acted_this_phase(target_id):
+			target = {}
+	if target.is_empty():
+		target = _first_available_gladiator_for_action()
 	if target.is_empty():
 		return "No available gladiator for specialized drills."
+	var resolved_target_id: String = str(target.get("id", "")).strip_edges()
 	if choice_id == "ATK_UP":
 		target["atk"] = maxi(1, int(target.get("atk", 1)) + 1)
 		target["def"] = maxi(1, int(target.get("def", 1)) - 1)
+		mark_gladiator_acted_this_phase(resolved_target_id)
 		return "%s completed offensive drills (+1 ATK, -1 DEF)." % get_gladiator_display_name(target)
 	if choice_id == "DEF_UP":
 		target["def"] = maxi(1, int(target.get("def", 1)) + 1)
 		target["atk"] = maxi(1, int(target.get("atk", 1)) - 1)
+		mark_gladiator_acted_this_phase(resolved_target_id)
 		return "%s completed defensive drills (+1 DEF, -1 ATK)." % get_gladiator_display_name(target)
 	return "Nothing changes."
 
@@ -2032,11 +2128,40 @@ func _most_injured_gladiator() -> Dictionary:
 			target = gladiator
 	return target
 
-func _first_available_gladiator() -> Dictionary:
+func _first_available_gladiator_for_action() -> Dictionary:
 	for gladiator: Dictionary in roster:
-		if get_gladiator_status(gladiator) == STATUS_AVAILABLE:
-			return gladiator
+		if get_gladiator_status(gladiator) != STATUS_AVAILABLE:
+			continue
+		var gladiator_id: String = str(gladiator.get("id", "")).strip_edges()
+		if has_gladiator_acted_this_phase(gladiator_id):
+			continue
+		return gladiator
 	return {}
+
+func has_gladiator_acted_this_phase(gladiator_id: String) -> bool:
+	var normalized_id: String = gladiator_id.strip_edges()
+	if normalized_id == "":
+		return false
+	return acted_gladiator_ids_this_phase.has(normalized_id)
+
+func mark_gladiator_acted_this_phase(gladiator_id: String) -> void:
+	var normalized_id: String = gladiator_id.strip_edges()
+	if normalized_id == "":
+		return
+	if acted_gladiator_ids_this_phase.has(normalized_id):
+		return
+	acted_gladiator_ids_this_phase.append(normalized_id)
+
+func _resolve_combatant_name_for_result(combatant_id: String, roster_entry: Dictionary) -> String:
+	if not roster_entry.is_empty():
+		return get_gladiator_display_name(roster_entry)
+	var fighter_a: Dictionary = current_fight_payload.get("fighter_a", {}) as Dictionary
+	var fighter_b: Dictionary = current_fight_payload.get("fighter_b", {}) as Dictionary
+	if str(fighter_a.get("id", "")) == combatant_id:
+		return get_gladiator_display_name(fighter_a)
+	if str(fighter_b.get("id", "")) == combatant_id:
+		return get_gladiator_display_name(fighter_b)
+	return combatant_id
 
 func _consume_next_fight_flags() -> void:
 	next_fight_enemy_level_bonus = 0

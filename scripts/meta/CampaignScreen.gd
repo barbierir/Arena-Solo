@@ -127,6 +127,16 @@ func _on_roster_list_item_selected(index: int) -> void:
 		_refresh_recent_events()
 		_refresh_selected_fighter()
 		return
+	if locked_tournament_gladiator_id == "" and GameManager.has_gladiator_acted_this_phase(gladiator_id):
+		var acted_name: String = gladiator_id
+		for roster_entry: Dictionary in GameManager.get_roster():
+			if str(roster_entry.get("id", "")) == gladiator_id:
+				acted_name = GameManager.get_gladiator_display_name(roster_entry)
+				break
+		GameManager.add_recent_event("%s already acted this phase." % acted_name)
+		_refresh_recent_events()
+		_refresh_selected_fighter()
+		return
 	if not GameManager.set_selected_gladiator(gladiator_id):
 		GameManager.add_recent_event("Selezione non valida: %s." % gladiator_id)
 		_refresh_recent_events()
@@ -380,6 +390,9 @@ func _render_roster() -> void:
 		var injury_label: String = ""
 		if status == GameManager.STATUS_INJURED:
 			injury_label = " (%s)" % GameManager.format_injury_recovering_label(int(gladiator.get("injured_days", 0)))
+		var acted_label: String = ""
+		if GameManager.has_gladiator_acted_this_phase(str(gladiator.get("id", ""))) and not GameManager.has_active_tournament():
+			acted_label = " [ACTED THIS PHASE]"
 		var row: String = "%s | %s | Lv %d XP %s | HP:%d ATK:%d DEF:%d | %s%s | W:%d L:%d" % [
 			GameManager.get_gladiator_display_name(gladiator),
 			str(gladiator.get("class", "")),
@@ -388,7 +401,7 @@ func _render_roster() -> void:
 			int(gladiator.get("max_hp", 1)),
 			int(gladiator.get("atk", 1)),
 			int(gladiator.get("def", 1)),
-			status,
+			status + acted_label,
 			injury_label,
 			int(gladiator.get("wins", 0)),
 			int(gladiator.get("losses", 0)),
