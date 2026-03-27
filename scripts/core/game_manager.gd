@@ -161,6 +161,10 @@ var campaign_run_id: String = ""
 
 var _content_registry: ContentRegistry
 var _stats_resolver: BuildStatsResolver
+var _is_revalidating_selection: bool = false
+var _is_emitting_roster_state_changed: bool = false
+var _pending_roster_state_changed_emit: bool = false
+var _pending_roster_state_changed_source: String = ""
 
 func get_current_phase() -> int:
 	return day
@@ -373,14 +377,31 @@ func get_gladiator_action_eligibility(gladiator_id: String, action_context: Stri
 		"tournament_exception_applies": false,
 	}
 	if normalized_id == "":
+		print("[ELIGIBILITY] compute phase=%d id=%s context=%s allow_exception=%s eligible=false reason=missing_empty_id tournament_exception=false" % [
+			day,
+			normalized_id,
+			action_context,
+			str(allow_tournament_exception),
+		])
 		return result
 	var gladiator: Dictionary = _find_gladiator_by_id(normalized_id)
 	if gladiator.is_empty():
+		print("[ELIGIBILITY] compute phase=%d id=%s context=%s allow_exception=%s eligible=false reason=missing_gladiator tournament_exception=false" % [
+			day,
+			normalized_id,
+			action_context,
+			str(allow_tournament_exception),
+		])
 		return result
 	var alive: bool = bool(gladiator.get("alive", false))
 	var injured_days: int = maxi(0, int(gladiator.get("injured_days", 0)))
 	var has_acted: bool = has_gladiator_acted_this_phase(normalized_id)
-	var tournament_exception_applies: bool = allow_tournament_exception and has_active_tournament() and can_continue_active_tournament() and normalized_id == get_locked_tournament_gladiator_id()
+	var tournament_lock_id: String = _active_tournament_gladiator_id()
+	var tournament_exception_applies: bool = allow_tournament_exception \
+		and action_context == ACTION_CONTEXT_TOURNAMENT_CONTINUATION \
+		and has_active_tournament() \
+		and tournament_lock_id != "" \
+		and normalized_id == tournament_lock_id
 	result["gladiator_name"] = get_gladiator_display_name(gladiator)
 	result["alive"] = alive
 	result["injured_days"] = injured_days
@@ -389,18 +410,51 @@ func get_gladiator_action_eligibility(gladiator_id: String, action_context: Stri
 	if not alive:
 		result["reason"] = ELIGIBILITY_REASON_DEAD
 		result["reason_code"] = "dead"
+		print("[ELIGIBILITY] compute phase=%d id=%s context=%s allow_exception=%s eligible=false reason=%s tournament_exception=%s" % [
+			day,
+			normalized_id,
+			action_context,
+			str(allow_tournament_exception),
+			str(result.get("reason_code", "")),
+			str(tournament_exception_applies),
+		])
 		return result
 	if injured_days > 0:
 		result["reason"] = ELIGIBILITY_REASON_INJURED
 		result["reason_code"] = "injured"
+		print("[ELIGIBILITY] compute phase=%d id=%s context=%s allow_exception=%s eligible=false reason=%s tournament_exception=%s" % [
+			day,
+			normalized_id,
+			action_context,
+			str(allow_tournament_exception),
+			str(result.get("reason_code", "")),
+			str(tournament_exception_applies),
+		])
 		return result
 	if has_acted and not tournament_exception_applies:
 		result["reason"] = ELIGIBILITY_REASON_ACTED
 		result["reason_code"] = "acted"
+		print("[ELIGIBILITY] compute phase=%d id=%s context=%s allow_exception=%s eligible=false reason=%s tournament_exception=%s" % [
+			day,
+			normalized_id,
+			action_context,
+			str(allow_tournament_exception),
+			str(result.get("reason_code", "")),
+			str(tournament_exception_applies),
+		])
 		return result
 	result["eligible"] = true
 	result["reason"] = ELIGIBILITY_REASON_OK
 	result["reason_code"] = "ok"
+	print("[ELIGIBILITY] compute phase=%d id=%s context=%s allow_exception=%s eligible=%s reason=%s tournament_exception=%s" % [
+		day,
+		normalized_id,
+		action_context,
+		str(allow_tournament_exception),
+		str(result.get("eligible", false)),
+		str(result.get("reason_code", "")),
+		str(tournament_exception_applies),
+	])
 	return result
 
 func is_gladiator_eligible_for_action(gladiator_id: String, action_context: String = ACTION_CONTEXT_NORMAL_FIGHT, allow_tournament_exception: bool = false) -> bool:
@@ -416,7 +470,8 @@ func get_available_gladiators() -> Array[Dictionary]:
 			continue
 		if tournament_locked_id != "" and gladiator_id != tournament_locked_id:
 			continue
-		if not is_gladiator_eligible_for_action(gladiator_id, ACTION_CONTEXT_NORMAL_FIGHT, tournament_locked_id != ""):
+		var action_context: String = ACTION_CONTEXT_TOURNAMENT_CONTINUATION if tournament_locked_id != "" else ACTION_CONTEXT_NORMAL_FIGHT
+		if not is_gladiator_eligible_for_action(gladiator_id, action_context, tournament_locked_id != ""):
 			continue
 		available.append(gladiator.duplicate(true))
 	return available
@@ -445,7 +500,8 @@ func set_selected_gladiator(gladiator_id: String) -> bool:
 	var locked_id: String = get_locked_tournament_gladiator_id()
 	if locked_id != "" and normalized_id != locked_id:
 		return false
-	if not is_gladiator_eligible_for_action(normalized_id, ACTION_CONTEXT_NORMAL_FIGHT, locked_id != ""):
+	var action_context: String = ACTION_CONTEXT_TOURNAMENT_CONTINUATION if locked_id != "" else ACTION_CONTEXT_NORMAL_FIGHT
+	if not is_gladiator_eligible_for_action(normalized_id, action_context, locked_id != ""):
 		return false
 	selected_gladiator_id = normalized_id
 	return true
@@ -458,6 +514,14 @@ func get_selected_gladiator() -> Dictionary:
 		return {}
 	var fighter: Dictionary = _find_gladiator_by_id(selected_gladiator_id)
 	return fighter.duplicate(true)
+
+func _active_tournament_gladiator_id() -> String:
+	if not has_active_tournament():
+		return ""
+	var normalized_locked_id: String = locked_tournament_gladiator_id.strip_edges()
+	if normalized_locked_id != "":
+		return normalized_locked_id
+	return str(active_tournament.get("gladiator_id", "")).strip_edges()
 
 func get_selected_gladiator_id() -> String:
 	if get_selected_gladiator().is_empty():
@@ -2266,29 +2330,83 @@ func _log_roster_eligibility_snapshot(source: String) -> void:
 		])
 	print("[ELIGIBILITY] roster_refresh source=%s phase=%d %s" % [source, day, " | ".join(rows)])
 
-func _revalidate_selected_gladiator(log_if_cleared: bool = true) -> bool:
+func _clear_selected_gladiator_if_needed(reason: String, source: String, details: String = "", log_if_cleared: bool = true) -> bool:
 	var normalized_id: String = selected_gladiator_id.strip_edges()
 	if normalized_id == "":
 		return false
+	selected_gladiator_id = ""
+	if log_if_cleared:
+		print("[SELECTION] cleared phase=%d source=%s previous=%s reason=%s details=%s" % [
+			day,
+			source,
+			normalized_id,
+			reason,
+			details,
+		])
+	return true
+
+func _revalidate_selected_gladiator(log_if_cleared: bool = true, source: String = "unspecified") -> bool:
+	if _is_revalidating_selection:
+		print("[SELECTION] revalidate skipped phase=%d source=%s reason=reentrant" % [day, source])
+		return selected_gladiator_id.strip_edges() != ""
+	_is_revalidating_selection = true
+	var normalized_id: String = selected_gladiator_id.strip_edges()
+	if normalized_id == "":
+		_is_revalidating_selection = false
+		return false
 	var locked_id: String = get_locked_tournament_gladiator_id()
 	if locked_id != "" and normalized_id != locked_id:
-		if log_if_cleared:
-			print("[ELIGIBILITY] selection_cleared reason=tournament_lock selected=%s locked=%s phase=%d" % [normalized_id, locked_id, day])
-		selected_gladiator_id = ""
+		_clear_selected_gladiator_if_needed("tournament_lock", source, "locked=%s" % locked_id, log_if_cleared)
+		_is_revalidating_selection = false
 		return false
 	var context: String = ACTION_CONTEXT_TOURNAMENT_CONTINUATION if locked_id != "" else ACTION_CONTEXT_NORMAL_FIGHT
 	var eligibility: Dictionary = get_gladiator_action_eligibility(normalized_id, context, locked_id != "")
+	print("[SELECTION] revalidate phase=%d source=%s selected=%s context=%s eligible=%s" % [
+		day,
+		source,
+		normalized_id,
+		context,
+		str(eligibility.get("eligible", false)),
+	])
 	if bool(eligibility.get("eligible", false)):
+		_is_revalidating_selection = false
 		return true
 	if log_if_cleared:
 		_log_action_attempt("selection_cleared", eligibility)
-	selected_gladiator_id = ""
+	_clear_selected_gladiator_if_needed(str(eligibility.get("reason_code", "invalid")), source, str(eligibility.get("reason", "")), false)
+	_is_revalidating_selection = false
 	return false
 
 func _emit_roster_state_changed(source: String) -> void:
-	_revalidate_selected_gladiator()
-	_log_roster_eligibility_snapshot(source)
-	roster_updated.emit()
+	var normalized_source: String = source.strip_edges()
+	if normalized_source == "":
+		normalized_source = "unspecified"
+	if _is_emitting_roster_state_changed:
+		_pending_roster_state_changed_emit = true
+		_pending_roster_state_changed_source = normalized_source
+		print("[ROSTER_REFRESH] coalesce phase=%d source=%s" % [day, normalized_source])
+		return
+	_is_emitting_roster_state_changed = true
+	var pass_index: int = 0
+	var active_source: String = normalized_source
+	while true:
+		pass_index += 1
+		_pending_roster_state_changed_emit = false
+		print("[ROSTER_REFRESH] enter phase=%d source=%s pass=%d" % [day, active_source, pass_index])
+		_revalidate_selected_gladiator(true, active_source)
+		_log_roster_eligibility_snapshot(active_source)
+		roster_updated.emit()
+		print("[ROSTER_REFRESH] exit phase=%d source=%s pass=%d pending=%s" % [
+			day,
+			active_source,
+			pass_index,
+			str(_pending_roster_state_changed_emit),
+		])
+		if not _pending_roster_state_changed_emit:
+			break
+		active_source = _pending_roster_state_changed_source if _pending_roster_state_changed_source != "" else active_source
+	_pending_roster_state_changed_source = ""
+	_is_emitting_roster_state_changed = false
 
 func clear_active_encounter_state(keep_tournament_lock: bool = false) -> void:
 	current_fight_payload = {}
