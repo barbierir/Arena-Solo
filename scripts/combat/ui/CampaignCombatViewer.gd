@@ -18,6 +18,7 @@ const FALLBACK_PLAYBACK_INTERVAL_SEC: float = 0.35
 @onready var _result_text: RichTextLabel = %ResultText
 @onready var _next_button: Button = %NextButton
 @onready var _play_all_button: Button = %PlayAllButton
+@onready var _finish_match_button: Button = %FinishMatchButton
 @onready var _close_button: Button = %CloseButton
 @onready var _playback_timer: Timer = %PlaybackTimer
 
@@ -27,6 +28,7 @@ var _timeline: Array[Dictionary] = []
 var _timeline_index: int = 0
 var _is_complete: bool = false
 var _finalized_once: bool = false
+var _is_instant_resolving: bool = false
 
 func _ready() -> void:
 	visible = false
@@ -54,15 +56,42 @@ func _on_next_button_pressed() -> void:
 	_step_once()
 
 func _on_play_all_button_pressed() -> void:
-	if _is_complete:
+	if _is_complete or _is_instant_resolving:
 		return
 	if _timeline.is_empty():
 		_finalize_playback()
 		return
 	_play_all_button.disabled = true
 	_next_button.disabled = true
+	_finish_match_button.disabled = true
 	if _playback_timer.is_stopped():
 		_playback_timer.start()
+
+func _on_finish_match_button_pressed() -> void:
+	if _is_complete:
+		print("[CombatUI] Instant resolve ignored because fight already ended")
+		return
+	if _is_instant_resolving:
+		print("[CombatUI] Instant resolve ignored because resolve is already running")
+		return
+	print("[CombatUI] Instant resolve requested")
+	_is_instant_resolving = true
+	_playback_timer.stop()
+	_next_button.disabled = true
+	_play_all_button.disabled = true
+	_finish_match_button.disabled = true
+	print("[Combat] Instant resolve start")
+	while not _is_complete and _timeline_index < _timeline.size():
+		var entry: Dictionary = _timeline[_timeline_index]
+		_timeline_index += 1
+		_apply_timeline_entry(entry)
+	if not _is_complete:
+		_finalize_playback()
+	print("[Combat] Instant resolve completed: winner=%s, turns=%d" % [
+		str(_fight_result.get("winner_id", "UNKNOWN")),
+		int(_fight_result.get("turns", 0)),
+	])
+	_is_instant_resolving = false
 
 func _on_playback_tick() -> void:
 	if _is_complete:
@@ -99,6 +128,7 @@ func _reset_viewer() -> void:
 	_timeline_index = 0
 	_is_complete = false
 	_finalized_once = false
+	_is_instant_resolving = false
 	_header_label.text = "Phase 1 - Arena Match"
 	_turn_label.text = "Turno: -"
 	_log_label.clear()
@@ -106,17 +136,23 @@ func _reset_viewer() -> void:
 	_result_text.clear()
 	_next_button.disabled = false
 	_play_all_button.disabled = false
+	_finish_match_button.disabled = false
+	_finish_match_button.visible = true
 	_close_button.disabled = true
 
 func _focus_primary_action() -> void:
 	_ensure_button_focusable(_play_all_button)
 	_ensure_button_focusable(_next_button)
+	_ensure_button_focusable(_finish_match_button)
 	_ensure_button_focusable(_close_button)
 	if _play_all_button.visible and not _play_all_button.disabled:
 		_play_all_button.grab_focus()
 		return
 	if _next_button.visible and not _next_button.disabled:
 		_next_button.grab_focus()
+		return
+	if _finish_match_button.visible and not _finish_match_button.disabled:
+		_finish_match_button.grab_focus()
 		return
 	if _close_button.visible and not _close_button.disabled:
 		_close_button.grab_focus()
@@ -216,6 +252,8 @@ func _finalize_playback() -> void:
 	_playback_timer.stop()
 	_next_button.disabled = true
 	_play_all_button.disabled = true
+	_finish_match_button.disabled = true
+	_finish_match_button.visible = false
 	_close_button.disabled = false
 	_result_panel.visible = true
 	_result_text.text = _build_result_text(_fight_result)
