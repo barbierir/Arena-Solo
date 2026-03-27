@@ -1366,18 +1366,18 @@ func _build_beast_stats(beast_type: String, beast_level: int) -> Dictionary:
 		return {
 			"max_hp": 13 + clamped_level,
 			"atk": 5 + clamped_level,
-			"def": 2 + (clamped_level // 2),
+			"def": 2 + int(clamped_level / 2.0),
 		}
 	if beast_type == BEAST_TYPE_BOAR:
 		return {
 			"max_hp": 18 + clamped_level * 2,
 			"atk": 5 + clamped_level,
-			"def": 4 + (clamped_level // 2),
+			"def": 4 + int(clamped_level / 2.0),
 		}
 	return {
 		"max_hp": 16 + clamped_level,
 		"atk": 7 + clamped_level,
-		"def": 4 + (clamped_level // 2),
+		"def": 4 + int(clamped_level / 2.0),
 	}
 
 func _beast_display_name(beast_type: String) -> String:
