@@ -1222,7 +1222,7 @@ func write_battle_report(result: Dictionary, event_data: Dictionary = {}) -> voi
 	lines.append("Matchup Label: %s vs %s" % [
 		str(payload.get("attacker_label", str(payload.get("attacker_build_id", "")))),
 		str(payload.get("defender_label", str(payload.get("defender_build_id", "")))),
-	)])
+	])
 	lines.append("Player Gladiator: id=%s, name=%s, class=%s, level=%d" % [
 		str(player_fighter.get("id", "")),
 		get_gladiator_display_name(player_fighter),
